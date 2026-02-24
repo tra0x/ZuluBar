@@ -1,4 +1,5 @@
 import Cocoa
+import ServiceManagement
 
 /// Main application delegate that manages the status bar item and user interactions
 class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
@@ -8,6 +9,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var statusItem: NSStatusItem!
     var timer: Timer?
     var isShowingFeedback = false
+    private lazy var dateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.timeZone = TimeZone(abbreviation: "UTC")
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        return formatter
+    }()
 
     // MARK: - UserDefaults Keys
 
@@ -92,6 +100,21 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return .humanReadable
         }
         set { UserDefaults.standard.set(newValue.rawValue, forKey: UserDefaultsKeys.copyFormat) }
+    }
+
+    var launchAtLogin: Bool {
+        get { SMAppService.mainApp.status == .enabled }
+        set {
+            do {
+                if newValue {
+                    try SMAppService.mainApp.register()
+                } else {
+                    try SMAppService.mainApp.unregister()
+                }
+            } catch {
+                print("Launch at Login error: \(error)")
+            }
+        }
     }
 
     // MARK: - Application Lifecycle
@@ -245,6 +268,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         menu.addItem(NSMenuItem.separator())
 
+        let launchAtLoginItem = NSMenuItem(title: "Launch at Login", action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
+        launchAtLoginItem.state = launchAtLogin ? .on : .off
+        menu.addItem(launchAtLoginItem)
+
+        menu.addItem(NSMenuItem.separator())
+
         let quitItem = NSMenuItem(title: "Quit", action: #selector(quitApp), keyEquivalent: "q")
         menu.addItem(quitItem)
 
@@ -305,6 +334,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc func setCopyFormatRFC3339() {
         copyFormat = .rfc3339
+    }
+
+    @objc func toggleLaunchAtLogin(_ sender: NSMenuItem) {
+        launchAtLogin.toggle()
+        sender.state = launchAtLogin ? .on : .off
     }
 
     @objc func quitApp() {
@@ -376,10 +410,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         // Add date if enabled
         if showDate {
-            let dateFormatter = DateFormatter()
-            dateFormatter.timeZone = TimeZone(abbreviation: "UTC")
-            dateFormatter.locale = Locale(identifier: "en_US_POSIX")
-            dateFormatter.calendar = Calendar(identifier: .gregorian)
             dateFormatter.dateFormat = dateFormat.formatString
             displayText = dateFormatter.string(from: Date()) + " "
         }
