@@ -1,4 +1,4 @@
-.PHONY: build test clean release zip dmg run help build-free build-free-release build-paid build-paid-release zip-free
+.PHONY: build test clean release zip dmg run help build-free build-free-release build-paid build-paid-release zip-free notarize
 
 # Variables
 APP_NAME = ZuluBar
@@ -19,6 +19,8 @@ DERIVED_DATA_PATH = $(BUILD_DIR)/DerivedDataLocal
 #   TEAM_ID = TEAMID
 CODESIGN_IDENTITY = "Developer ID Application: Your Name (TEAMID)"
 TEAM_ID = TEAMID
+APPLE_ID =
+APP_SPECIFIC_PASSWORD =
 -include .signing.local.mk
 
 # Default target - show help
@@ -41,6 +43,7 @@ help:
 	@echo "  Distribution:"
 	@echo "    make zip                 Create paid build ZIP (signed)"
 	@echo "    make zip-free            Create free build ZIP (unsigned)"
+	@echo "    make notarize            Build, sign, notarize, and staple paid release"
 	@echo "    make dmg                 Create DMG disk image (paid)"
 	@echo ""
 	@echo "  Quick Commands:"
@@ -79,6 +82,7 @@ build-paid:
 		-scheme $(SCHEME) \
 		-configuration $(CONFIG_DEBUG_PAID) \
 		CONFIGURATION_BUILD_DIR=$(BUILD_DIR)/Debug-Paid \
+		CODE_SIGN_STYLE=Manual \
 		CODE_SIGN_IDENTITY=$(CODESIGN_IDENTITY) \
 		DEVELOPMENT_TEAM=$(TEAM_ID) \
 		build
@@ -90,6 +94,7 @@ build-paid-release:
 		-scheme $(SCHEME) \
 		-configuration $(CONFIG_RELEASE_PAID) \
 		CONFIGURATION_BUILD_DIR=$(BUILD_DIR)/Release-Paid \
+		CODE_SIGN_STYLE=Manual \
 		CODE_SIGN_IDENTITY=$(CODESIGN_IDENTITY) \
 		DEVELOPMENT_TEAM=$(TEAM_ID) \
 		build
@@ -120,6 +125,24 @@ zip: build-paid-release
 		zip -r $(APP_NAME)-$(DATE).zip $(APP_NAME).app
 	@echo "✓ Created: $(BUILD_DIR)/Release-Paid/$(APP_NAME)-$(DATE).zip"
 	@ls -lh $(BUILD_DIR)/Release-Paid/$(APP_NAME)-$(DATE).zip | awk '{print "  Size: " $$5}'
+
+# Notarize paid release build
+notarize: build-paid-release
+	@echo "→ Zipping for notarization..."
+	@cd $(BUILD_DIR)/Release-Paid && \
+		zip -r $(APP_NAME)-notarize.zip $(APP_NAME).app
+	@echo "→ Submitting to Apple notarization service (this may take a few minutes)..."
+	@xcrun notarytool submit $(BUILD_DIR)/Release-Paid/$(APP_NAME)-notarize.zip \
+		--apple-id "$(APPLE_ID)" \
+		--password "$(APP_SPECIFIC_PASSWORD)" \
+		--team-id "$(TEAM_ID)" \
+		--wait
+	@echo "→ Stapling notarization ticket..."
+	@xcrun stapler staple $(BUILD_DIR)/Release-Paid/$(APP_NAME).app
+	@echo "→ Verifying Gatekeeper acceptance..."
+	@spctl --assess --verbose $(BUILD_DIR)/Release-Paid/$(APP_NAME).app
+	@rm $(BUILD_DIR)/Release-Paid/$(APP_NAME)-notarize.zip
+	@echo "✓ Notarized and stapled: $(BUILD_DIR)/Release-Paid/$(APP_NAME).app"
 
 # Create DMG disk image (builds paid release first)
 dmg: build-paid-release
