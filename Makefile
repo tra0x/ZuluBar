@@ -1,4 +1,4 @@
-.PHONY: build test clean release zip dmg run help build-free build-free-release build-paid build-paid-release zip-free notarize
+.PHONY: build test clean release zip dmg run help build-free build-free-release build-paid build-paid-release zip-free notarize upload-appcast
 
 # Variables
 APP_NAME = ZuluBar
@@ -21,6 +21,16 @@ CODESIGN_IDENTITY = "Developer ID Application: Your Name (TEAMID)"
 TEAM_ID = TEAMID
 APPLE_ID =
 APP_SPECIFIC_PASSWORD =
+
+# Cloudflare R2 — override in .signing.local.mk (gitignored), e.g.:
+#   R2_ACCESS_KEY_ID = ...
+#   R2_SECRET_ACCESS_KEY = ...
+#   R2_BUCKET = zulubar-updates
+#   R2_ENDPOINT = https://<account-id>.r2.cloudflarestorage.com
+R2_ACCESS_KEY_ID =
+R2_SECRET_ACCESS_KEY =
+R2_BUCKET = zulubar-updates
+R2_ENDPOINT =
 -include .signing.local.mk
 
 # Default target - show help
@@ -45,6 +55,7 @@ help:
 	@echo "    make zip-free            Create free build ZIP (unsigned)"
 	@echo "    make notarize            Build, sign, notarize, and staple paid release"
 	@echo "    make dmg                 Create DMG disk image (paid)"
+	@echo "    make upload-appcast      Upload dist/appcast.xml to R2"
 	@echo ""
 	@echo "  Quick Commands:"
 	@echo "    make                     Show this help"
@@ -160,6 +171,17 @@ dmg: build-paid-release
 run: build
 	@echo "→ Launching $(APP_NAME)..."
 	@open $(BUILD_DIR)/Debug-Free/$(APP_NAME).app
+
+# Upload appcast.xml to R2
+upload-appcast:
+	@echo "→ Uploading appcast.xml to R2..."
+	@AWS_ACCESS_KEY_ID=$(R2_ACCESS_KEY_ID) \
+		AWS_SECRET_ACCESS_KEY=$(R2_SECRET_ACCESS_KEY) \
+		aws s3 cp dist/appcast.xml s3://$(R2_BUCKET)/appcast.xml \
+		--endpoint-url $(R2_ENDPOINT) \
+		--content-type "application/rss+xml" \
+		--cache-control "no-cache, no-store"
+	@echo "✓ Live: https://updates.zulubar.app/appcast.xml"
 
 # Clean all build artifacts
 clean:
