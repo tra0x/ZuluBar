@@ -1,4 +1,4 @@
-.PHONY: build test clean release zip dmg run help build-free build-free-release build-paid build-paid-release zip-free notarize upload-appcast
+.PHONY: build test clean release zip dmg run help build-free build-free-release build-paid build-paid-release zip-free notarize upload-appcast publish-update
 
 # Variables
 APP_NAME = ZuluBar
@@ -27,6 +27,9 @@ APP_SPECIFIC_PASSWORD =
 #   R2_BUCKET = zulubar-updates
 CLOUDFLARE_API_TOKEN =
 R2_BUCKET = zulubar-updates
+
+# Sparkle signing tool (in SPM artifacts — requires one prior build)
+SPARKLE_SIGN = $(BUILD_DIR)/DerivedDataLocal/SourcePackages/artifacts/sparkle/Sparkle/bin/sign_update
 -include .signing.local.mk
 
 # Default target - show help
@@ -52,6 +55,7 @@ help:
 	@echo "    make notarize            Build, sign, notarize, and staple paid release"
 	@echo "    make dmg                 Create DMG disk image (paid)"
 	@echo "    make upload-appcast      Upload dist/appcast.xml to R2"
+	@echo "    make publish-update      Build, sign, and publish a release (VERSION= required)"
 	@echo ""
 	@echo "  Quick Commands:"
 	@echo "    make                     Show this help"
@@ -168,13 +172,31 @@ run: build
 	@echo "→ Launching $(APP_NAME)..."
 	@open $(BUILD_DIR)/Debug-Free/$(APP_NAME).app
 
+# Build, sign, notarize, and publish a release
+# Usage: make publish-update VERSION=1.0.0 NOTES="What's new"
+# For CI: set SPARKLE_ED_PRIVATE_KEY env var and pass --ed-key-file - to sign_update
+publish-update: notarize
+	@[ -n "$(VERSION)" ] || { echo "Error: VERSION required. Usage: make publish-update VERSION=1.0.0"; exit 1; }
+	@[ -f "$(SPARKLE_SIGN)" ] || { echo "Error: sign_update not found at $(SPARKLE_SIGN). Run 'make build' first."; exit 1; }
+	@echo "→ Creating ZuluBar-$(VERSION).zip..."
+	@ditto -c -k --keepParent $(BUILD_DIR)/Release-Paid/$(APP_NAME).app \
+		$(BUILD_DIR)/Release-Paid/ZuluBar-$(VERSION).zip
+	@CLOUDFLARE_API_TOKEN=$(CLOUDFLARE_API_TOKEN) \
+		R2_BUCKET=$(R2_BUCKET) \
+		SPARKLE_SIGN=$(SPARKLE_SIGN) \
+		./scripts/publish-update.sh \
+		"$(VERSION)" \
+		"$(BUILD_DIR)/Release-Paid/ZuluBar-$(VERSION).zip" \
+		"$(NOTES)"
+
 # Upload appcast.xml to R2
 upload-appcast:
 	@echo "→ Uploading appcast.xml to R2..."
 	@CLOUDFLARE_API_TOKEN=$(CLOUDFLARE_API_TOKEN) \
 		wrangler r2 object put $(R2_BUCKET)/appcast.xml \
 		--file dist/appcast.xml \
-		--content-type "application/rss+xml"
+		--content-type "application/rss+xml" \
+		--cache-control "no-cache"
 	@echo "✓ Live: https://updates.zulubar.app/appcast.xml"
 
 # Clean all build artifacts
