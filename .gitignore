@@ -1,0 +1,17 @@
+# Xcode user-specific files
+xcuserdata/
+*.xcuserstate
+
+# Build outputs
+build/
+DerivedData/
+
+# macOS
+.DS_Store
+
+# App packaging
+*.app
+*.dSYM.zip
+
+# Local signing overrides
+.signing.local.mk
