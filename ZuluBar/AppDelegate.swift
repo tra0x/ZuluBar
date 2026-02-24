@@ -1,5 +1,8 @@
 import Cocoa
 import ServiceManagement
+#if IS_PAID_BUILD
+import Sparkle
+#endif
 
 /// Main application delegate that manages the status bar item and user interactions
 class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
@@ -9,6 +12,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var statusItem: NSStatusItem!
     var timer: Timer?
     var isShowingFeedback = false
+    #if IS_PAID_BUILD
+    private let updaterController = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
+    #endif
     private lazy var dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.timeZone = TimeZone(abbreviation: "UTC")
@@ -268,6 +274,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         menu.addItem(NSMenuItem.separator())
 
+        #if IS_PAID_BUILD
+        let checkForUpdatesItem = NSMenuItem(title: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: "")
+        menu.addItem(checkForUpdatesItem)
+        #endif
+
         let launchAtLoginItem = NSMenuItem(title: "Launch at Login", action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
         launchAtLoginItem.state = launchAtLogin ? .on : .off
         menu.addItem(launchAtLoginItem)
@@ -335,6 +346,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc func setCopyFormatRFC3339() {
         copyFormat = .rfc3339
     }
+
+    #if IS_PAID_BUILD
+    @objc func checkForUpdates(_ sender: NSMenuItem) {
+        updaterController.checkForUpdates(sender)
+    }
+    #endif
 
     @objc func toggleLaunchAtLogin(_ sender: NSMenuItem) {
         launchAtLogin.toggle()
