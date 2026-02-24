@@ -23,14 +23,10 @@ APPLE_ID =
 APP_SPECIFIC_PASSWORD =
 
 # Cloudflare R2 — override in .signing.local.mk (gitignored), e.g.:
-#   R2_ACCESS_KEY_ID = ...
-#   R2_SECRET_ACCESS_KEY = ...
+#   CLOUDFLARE_API_TOKEN = ...
 #   R2_BUCKET = zulubar-updates
-#   R2_ENDPOINT = https://<account-id>.r2.cloudflarestorage.com
-R2_ACCESS_KEY_ID =
-R2_SECRET_ACCESS_KEY =
+CLOUDFLARE_API_TOKEN =
 R2_BUCKET = zulubar-updates
-R2_ENDPOINT =
 -include .signing.local.mk
 
 # Default target - show help
@@ -175,12 +171,10 @@ run: build
 # Upload appcast.xml to R2
 upload-appcast:
 	@echo "→ Uploading appcast.xml to R2..."
-	@AWS_ACCESS_KEY_ID=$(R2_ACCESS_KEY_ID) \
-		AWS_SECRET_ACCESS_KEY=$(R2_SECRET_ACCESS_KEY) \
-		aws s3 cp dist/appcast.xml s3://$(R2_BUCKET)/appcast.xml \
-		--endpoint-url $(R2_ENDPOINT) \
-		--content-type "application/rss+xml" \
-		--cache-control "no-cache, no-store"
+	@CLOUDFLARE_API_TOKEN=$(CLOUDFLARE_API_TOKEN) \
+		wrangler r2 object put $(R2_BUCKET)/appcast.xml \
+		--file dist/appcast.xml \
+		--content-type "application/rss+xml"
 	@echo "✓ Live: https://updates.zulubar.app/appcast.xml"
 
 # Clean all build artifacts
