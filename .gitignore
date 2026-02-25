@@ -15,3 +15,6 @@ DerivedData/
 
 # Local signing overrides
 .signing.local.mk
+
+# Wrangler CLI cache/state
+.wrangler/

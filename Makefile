@@ -173,20 +173,21 @@ run: build
 	@open $(BUILD_DIR)/Debug-Free/$(APP_NAME).app
 
 # Build, sign, notarize, and publish a release
-# Usage: make publish-update VERSION=1.0.0 NOTES="What's new"
-# For CI: set SPARKLE_ED_PRIVATE_KEY env var and pass --ed-key-file - to sign_update
+# Version and build number are read from the built app — no VERSION= needed
+# Usage: make publish-update NOTES="What's new"
+# For CI: set SPARKLE_ED_PRIVATE_KEY instead of using Keychain
 publish-update: notarize
-	@[ -n "$(VERSION)" ] || { echo "Error: VERSION required. Usage: make publish-update VERSION=1.0.0"; exit 1; }
 	@[ -f "$(SPARKLE_SIGN)" ] || { echo "Error: sign_update not found at $(SPARKLE_SIGN). Run 'make build' first."; exit 1; }
-	@echo "→ Creating ZuluBar-$(VERSION).zip..."
+	$(eval APP_VERSION := $(shell /usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$(BUILD_DIR)/Release-Paid/$(APP_NAME).app/Contents/Info.plist"))
+	@echo "→ Creating ZuluBar-$(APP_VERSION).zip..."
 	@ditto -c -k --keepParent $(BUILD_DIR)/Release-Paid/$(APP_NAME).app \
-		$(BUILD_DIR)/Release-Paid/ZuluBar-$(VERSION).zip
+		$(BUILD_DIR)/Release-Paid/ZuluBar-$(APP_VERSION).zip
 	@CLOUDFLARE_API_TOKEN=$(CLOUDFLARE_API_TOKEN) \
 		R2_BUCKET=$(R2_BUCKET) \
 		SPARKLE_SIGN=$(SPARKLE_SIGN) \
+		APP_PATH=$(BUILD_DIR)/Release-Paid/$(APP_NAME).app \
 		./scripts/publish-update.sh \
-		"$(VERSION)" \
-		"$(BUILD_DIR)/Release-Paid/ZuluBar-$(VERSION).zip" \
+		"$(BUILD_DIR)/Release-Paid/ZuluBar-$(APP_VERSION).zip" \
 		"$(NOTES)"
 
 # Upload appcast.xml to R2

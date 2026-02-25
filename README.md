@@ -20,6 +20,16 @@ Copy formats:
 - Unix Timestamp: `1733150625`
 - RFC 3339: `2025-12-02T14:23:45Z`
 
+## Free vs. Paid
+
+ZuluBar is 100% open source (MIT). You can build it yourself for free with full functionality.
+
+The paid version adds:
+
+- Code-signed and notarized — no Gatekeeper warnings
+- Automatic updates
+- Supports continued development
+
 ## Development
 
 Requires macOS 14.0+ and Xcode 16.0+. Open `ZuluBar.xcodeproj` and run (⌘R).
