@@ -108,7 +108,33 @@ build-paid-release:
 		CODE_SIGN_STYLE=Manual \
 		CODE_SIGN_IDENTITY=$(CODESIGN_IDENTITY) \
 		DEVELOPMENT_TEAM=$(TEAM_ID) \
+		ENABLE_HARDENED_RUNTIME=YES \
+		CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO \
+		OTHER_CODE_SIGN_FLAGS=--timestamp \
 		build
+	@echo "→ Re-signing Sparkle framework with Developer ID..."
+	@codesign --force --options runtime --timestamp \
+		--sign $(CODESIGN_IDENTITY) \
+		$(BUILD_DIR)/Release-Paid/$(APP_NAME).app/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices/Downloader.xpc
+	@codesign --force --options runtime --timestamp \
+		--sign $(CODESIGN_IDENTITY) \
+		$(BUILD_DIR)/Release-Paid/$(APP_NAME).app/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices/Installer.xpc
+	@codesign --force --options runtime --timestamp \
+		--sign $(CODESIGN_IDENTITY) \
+		$(BUILD_DIR)/Release-Paid/$(APP_NAME).app/Contents/Frameworks/Sparkle.framework/Versions/B/Updater.app
+	@codesign --force --options runtime --timestamp \
+		--sign $(CODESIGN_IDENTITY) \
+		$(BUILD_DIR)/Release-Paid/$(APP_NAME).app/Contents/Frameworks/Sparkle.framework/Versions/B/Autoupdate
+	@codesign --force --options runtime --timestamp \
+		--sign $(CODESIGN_IDENTITY) \
+		$(BUILD_DIR)/Release-Paid/$(APP_NAME).app/Contents/Frameworks/Sparkle.framework
+	@echo "→ Re-signing app bundle..."
+	@codesign --force --options runtime --timestamp \
+		--sign $(CODESIGN_IDENTITY) \
+		--entitlements ZuluBar/ZuluBar.entitlements \
+		$(BUILD_DIR)/Release-Paid/$(APP_NAME).app
+	@echo "→ Verifying code signature..."
+	@codesign --verify --deep --strict $(BUILD_DIR)/Release-Paid/$(APP_NAME).app
 	@echo "✓ Built: $(BUILD_DIR)/Release-Paid/$(APP_NAME).app"
 
 # Run tests
@@ -132,16 +158,16 @@ zip-free: build-free-release
 # Create ZIP for paid build (for distribution)
 zip: build-paid-release
 	@echo "→ Creating ZIP archive (paid build)..."
-	@cd $(BUILD_DIR)/Release-Paid && \
-		zip -r $(APP_NAME)-$(DATE).zip $(APP_NAME).app
+	@ditto -c -k --keepParent $(BUILD_DIR)/Release-Paid/$(APP_NAME).app \
+		$(BUILD_DIR)/Release-Paid/$(APP_NAME)-$(DATE).zip
 	@echo "✓ Created: $(BUILD_DIR)/Release-Paid/$(APP_NAME)-$(DATE).zip"
 	@ls -lh $(BUILD_DIR)/Release-Paid/$(APP_NAME)-$(DATE).zip | awk '{print "  Size: " $$5}'
 
 # Notarize paid release build
 notarize: build-paid-release
 	@echo "→ Zipping for notarization..."
-	@cd $(BUILD_DIR)/Release-Paid && \
-		zip -r $(APP_NAME)-notarize.zip $(APP_NAME).app
+	@ditto -c -k --keepParent $(BUILD_DIR)/Release-Paid/$(APP_NAME).app \
+		$(BUILD_DIR)/Release-Paid/$(APP_NAME)-notarize.zip
 	@echo "→ Submitting to Apple notarization service (this may take a few minutes)..."
 	@xcrun notarytool submit $(BUILD_DIR)/Release-Paid/$(APP_NAME)-notarize.zip \
 		--apple-id "$(APPLE_ID)" \
