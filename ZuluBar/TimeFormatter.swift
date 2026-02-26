@@ -44,8 +44,13 @@ struct UTCTimeFormatter {
 
     private static let humanReadableFormatterSeconds = makeDateFormatter(dateFormat: "HH:mm:ss")
     private static let humanReadableFormatterNoSeconds = makeDateFormatter(dateFormat: "HH:mm")
-    private static let rfc3339Formatter = makeDateFormatter(dateFormat: "yyyy-MM-dd'T'HH:mm:ssZZZZZ")
     private static let iso8601Formatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.timeZone = utcTimeZone
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
+    private static let rfc3339Formatter: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.timeZone = utcTimeZone
         formatter.formatOptions = [.withInternetDateTime]
