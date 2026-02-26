@@ -91,7 +91,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                let suffix = DisplaySuffix(rawValue: rawValue) {
                 return suffix
             }
-            return .utc
+            return .z
         }
         set { UserDefaults.standard.set(newValue.rawValue, forKey: UserDefaultsKeys.displaySuffix) }
     }
@@ -234,13 +234,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let displaySuffixItem = NSMenuItem(title: "Display Suffix", action: nil, keyEquivalent: "")
         let displaySuffixSubmenu = NSMenu()
 
-        let utcSuffixItem = NSMenuItem(title: "UTC (14:23:45 UTC)", action: #selector(setDisplaySuffixUTC), keyEquivalent: "")
-        utcSuffixItem.state = displaySuffix == .utc ? .on : .off
-        displaySuffixSubmenu.addItem(utcSuffixItem)
-
         let zSuffixItem = NSMenuItem(title: "Z (14:23:45Z)", action: #selector(setDisplaySuffixZ), keyEquivalent: "")
         zSuffixItem.state = displaySuffix == .z ? .on : .off
         displaySuffixSubmenu.addItem(zSuffixItem)
+
+        let utcSuffixItem = NSMenuItem(title: "UTC (14:23:45 UTC)", action: #selector(setDisplaySuffixUTC), keyEquivalent: "")
+        utcSuffixItem.state = displaySuffix == .utc ? .on : .off
+        displaySuffixSubmenu.addItem(utcSuffixItem)
 
         let noneSuffixItem = NSMenuItem(title: "None (14:23:45)", action: #selector(setDisplaySuffixNone), keyEquivalent: "")
         noneSuffixItem.state = displaySuffix == .none ? .on : .off

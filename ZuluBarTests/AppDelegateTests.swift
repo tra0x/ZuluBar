@@ -30,7 +30,7 @@ final class AppDelegateTests: XCTestCase {
     }
 
     func testDisplaySuffixDefaultIsUTC() {
-        XCTAssertEqual(delegate.displaySuffix, .utc)
+        XCTAssertEqual(delegate.displaySuffix, .z)
     }
 
     func testCopyFormatDefaultIsHumanReadable() {

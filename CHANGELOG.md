@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Right-click menu for settings and preferences
 - Toggle seconds display on/off
 - Date prefix formats: none, `Tue Dec 2`, or `Tue 2 Dec`
-- Display suffix options: `UTC`, `Z`, or none
+- Display suffix options: `Z`, `UTC`, or none
 - Three copy formats:
   - Human Readable (`14:23:45 UTC`)
   - Unix Timestamp (`1733150625`)

@@ -10,7 +10,7 @@ Lightweight UTC clock for the macOS menu bar with one-click copy and customizabl
 Display options:
 
 - Toggle seconds on/off
-- Suffix: `14:23:45 UTC` or `14:23:45Z` or `14:23:45`
+- Suffix: `14:23:45Z` or `14:23:45 UTC` or `14:23:45`
 - Date prefix: none, `Tue Dec 2 14:23:45 UTC`, or `Tue 2 Dec 14:23:45 UTC`
 
 Copy formats:
