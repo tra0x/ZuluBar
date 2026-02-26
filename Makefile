@@ -35,7 +35,7 @@ SPARKLE_SIGN = $(BUILD_DIR)/DerivedDataLocal/SourcePackages/artifacts/sparkle/Sp
 # Default target - show help
 help:
 	@echo "╔══════════════════════════════════════════════════════════╗"
-	@echo "║  ZuluBar - Available Make Commands                  ║"
+	@echo "║  ZuluBar - Available Make Commands                       ║"
 	@echo "╚══════════════════════════════════════════════════════════╝"
 	@echo ""
 	@echo "  Development:"
