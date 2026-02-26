@@ -38,7 +38,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Available formats for copying time to clipboard
     enum CopyFormat: String, CaseIterable {
         case humanReadable = "Human Readable"
-        case iso8601 = "ISO 8601"
         case unixTimestamp = "Unix Timestamp"
         case rfc3339 = "RFC 3339"
     }
@@ -99,9 +98,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     var copyFormat: CopyFormat {
         get {
-            if let rawValue = UserDefaults.standard.string(forKey: UserDefaultsKeys.copyFormat),
-               let format = CopyFormat(rawValue: rawValue) {
-                return format
+            if let rawValue = UserDefaults.standard.string(forKey: UserDefaultsKeys.copyFormat) {
+                if let format = CopyFormat(rawValue: rawValue) {
+                    return format
+                }
             }
             return .humanReadable
         }
@@ -257,10 +257,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         humanReadableItem.state = copyFormat == .humanReadable ? .on : .off
         copyFormatSubmenu.addItem(humanReadableItem)
 
-        let iso8601Item = NSMenuItem(title: "ISO 8601 (2025-12-02T14:23:45Z)", action: #selector(setCopyFormatISO8601), keyEquivalent: "")
-        iso8601Item.state = copyFormat == .iso8601 ? .on : .off
-        copyFormatSubmenu.addItem(iso8601Item)
-
         let unixTimestampItem = NSMenuItem(title: "Unix Timestamp (1733150625)", action: #selector(setCopyFormatUnixTimestamp), keyEquivalent: "")
         unixTimestampItem.state = copyFormat == .unixTimestamp ? .on : .off
         copyFormatSubmenu.addItem(unixTimestampItem)
@@ -335,10 +331,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         copyFormat = .humanReadable
     }
 
-    @objc func setCopyFormatISO8601() {
-        copyFormat = .iso8601
-    }
-
     @objc func setCopyFormatUnixTimestamp() {
         copyFormat = .unixTimestamp
     }
@@ -373,8 +365,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         case .humanReadable:
             // Always copy with seconds and UTC suffix, regardless of display settings
             format = .humanReadable(showSeconds: true, suffix: .utc)
-        case .iso8601:
-            format = .iso8601
         case .unixTimestamp:
             format = .unixTimestamp
         case .rfc3339:

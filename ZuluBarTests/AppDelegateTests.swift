@@ -62,9 +62,9 @@ final class AppDelegateTests: XCTestCase {
     }
 
     func testCopyFormatPersists() {
-        delegate.copyFormat = .iso8601
-        XCTAssertEqual(delegate.copyFormat, .iso8601)
-        XCTAssertEqual(defaults.string(forKey: "copyFormat"), "ISO 8601")
+        delegate.copyFormat = .rfc3339
+        XCTAssertEqual(delegate.copyFormat, .rfc3339)
+        XCTAssertEqual(defaults.string(forKey: "copyFormat"), "RFC 3339")
     }
 
     func testDateFormatPersists() {
@@ -80,14 +80,6 @@ final class AppDelegateTests: XCTestCase {
         let result = delegate.getFormattedTimeForCopy()
         XCTAssertTrue(result.hasSuffix(" UTC"), "Expected UTC suffix, got: \(result)")
         XCTAssertTrue(result.contains(":"), "Expected time with colons, got: \(result)")
-    }
-
-    func testCopyISO8601Format() {
-        delegate.copyFormat = .iso8601
-        let result = delegate.getFormattedTimeForCopy()
-        let regex = try! NSRegularExpression(pattern: #"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$"#)
-        let match = regex.firstMatch(in: result, range: NSRange(result.startIndex..., in: result))
-        XCTAssertNotNil(match, "Expected ISO 8601 format, got: \(result)")
     }
 
     func testCopyUnixTimestampIsInteger() {

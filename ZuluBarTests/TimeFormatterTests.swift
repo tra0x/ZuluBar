@@ -56,14 +56,6 @@ final class TimeFormatterTests: XCTestCase {
         XCTAssertEqual(result, "14:23")
     }
 
-    // MARK: - ISO 8601 Format Tests
-
-    func testISO8601Format() {
-        let format = UTCTimeFormatter.Format.iso8601
-        let result = UTCTimeFormatter.format(testDate, as: format)
-        XCTAssertEqual(result, "2025-12-02T14:23:45Z")
-    }
-
     // MARK: - Unix Timestamp Format Tests
 
     func testUnixTimestampFormat() {

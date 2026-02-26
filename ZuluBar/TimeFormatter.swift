@@ -8,7 +8,6 @@ struct UTCTimeFormatter {
     /// Available formats for time output
     enum Format {
         case humanReadable(showSeconds: Bool, suffix: Suffix)
-        case iso8601
         case unixTimestamp
         case rfc3339
     }
@@ -44,12 +43,6 @@ struct UTCTimeFormatter {
 
     private static let humanReadableFormatterSeconds = makeDateFormatter(dateFormat: "HH:mm:ss")
     private static let humanReadableFormatterNoSeconds = makeDateFormatter(dateFormat: "HH:mm")
-    private static let iso8601Formatter: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.timeZone = utcTimeZone
-        formatter.formatOptions = [.withInternetDateTime]
-        return formatter
-    }()
     private static let rfc3339Formatter: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.timeZone = utcTimeZone
@@ -67,9 +60,6 @@ struct UTCTimeFormatter {
         case .humanReadable(let showSeconds, let suffix):
             let formatter = showSeconds ? humanReadableFormatterSeconds : humanReadableFormatterNoSeconds
             return formatter.string(from: date) + suffix.stringValue
-
-        case .iso8601:
-            return iso8601Formatter.string(from: date)
 
         case .unixTimestamp:
             return String(Int(date.timeIntervalSince1970))
