@@ -17,7 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Date prefix formats: none, `Tue Dec 2`, or `Tue 2 Dec`
 - Display suffix options: `Z`, `UTC`, or none
 - Three copy formats:
-  - Human Readable (`14:23:45 UTC`)
+  - Display (`14:23:45Z`)
   - Unix Timestamp (`1733150625`)
   - RFC 3339 (`2025-12-02T14:23:45Z`)
 - All preferences persisted via UserDefaults

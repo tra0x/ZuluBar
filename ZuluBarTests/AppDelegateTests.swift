@@ -33,8 +33,8 @@ final class AppDelegateTests: XCTestCase {
         XCTAssertEqual(delegate.displaySuffix, .z)
     }
 
-    func testCopyFormatDefaultIsHumanReadable() {
-        XCTAssertEqual(delegate.copyFormat, .humanReadable)
+    func testCopyFormatDefaultIsDisplay() {
+        XCTAssertEqual(delegate.copyFormat, .display)
     }
 
     func testDateFormatDefaultIsDayMonthDate() {
@@ -75,10 +75,10 @@ final class AppDelegateTests: XCTestCase {
 
     // MARK: - Copy Format Output
 
-    func testCopyHumanReadableHasUTCSuffix() {
-        delegate.copyFormat = .humanReadable
+    func testCopyDisplayMatchesSuffix() {
+        delegate.copyFormat = .display
         let result = delegate.getFormattedTimeForCopy()
-        XCTAssertTrue(result.hasSuffix(" UTC"), "Expected UTC suffix, got: \(result)")
+        XCTAssertTrue(result.hasSuffix("Z"), "Expected Z suffix, got: \(result)")
         XCTAssertTrue(result.contains(":"), "Expected time with colons, got: \(result)")
     }
 

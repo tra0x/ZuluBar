@@ -37,7 +37,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     /// Available formats for copying time to clipboard
     enum CopyFormat: String, CaseIterable {
-        case humanReadable = "Human Readable"
+        case display = "Display"
         case unixTimestamp = "Unix Timestamp"
         case rfc3339 = "RFC 3339"
     }
@@ -99,11 +99,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var copyFormat: CopyFormat {
         get {
             if let rawValue = UserDefaults.standard.string(forKey: UserDefaultsKeys.copyFormat) {
+                if rawValue == "Human Readable" {
+                    return .display
+                }
                 if let format = CopyFormat(rawValue: rawValue) {
                     return format
                 }
             }
-            return .humanReadable
+            return .display
         }
         set { UserDefaults.standard.set(newValue.rawValue, forKey: UserDefaultsKeys.copyFormat) }
     }
@@ -253,9 +256,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let copyFormatItem = NSMenuItem(title: "Copy Format", action: nil, keyEquivalent: "")
         let copyFormatSubmenu = NSMenu()
 
-        let humanReadableItem = NSMenuItem(title: "Human Readable (14:23:45 UTC)", action: #selector(setCopyFormatHumanReadable), keyEquivalent: "")
-        humanReadableItem.state = copyFormat == .humanReadable ? .on : .off
-        copyFormatSubmenu.addItem(humanReadableItem)
+        let displayExample = UTCTimeFormatter.format(as: .humanReadable(showSeconds: showSeconds, suffix: convertDisplaySuffix(displaySuffix)))
+        let displayItem = NSMenuItem(title: "Display (\(displayExample))", action: #selector(setCopyFormatDisplay), keyEquivalent: "")
+        displayItem.state = copyFormat == .display ? .on : .off
+        copyFormatSubmenu.addItem(displayItem)
 
         let unixTimestampItem = NSMenuItem(title: "Unix Timestamp (1733150625)", action: #selector(setCopyFormatUnixTimestamp), keyEquivalent: "")
         unixTimestampItem.state = copyFormat == .unixTimestamp ? .on : .off
@@ -327,8 +331,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         updateUTC()
     }
 
-    @objc func setCopyFormatHumanReadable() {
-        copyFormat = .humanReadable
+    @objc func setCopyFormatDisplay() {
+        copyFormat = .display
     }
 
     @objc func setCopyFormatUnixTimestamp() {
@@ -362,9 +366,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let format: UTCTimeFormatter.Format
 
         switch copyFormat {
-        case .humanReadable:
-            // Always copy with seconds and UTC suffix, regardless of display settings
-            format = .humanReadable(showSeconds: true, suffix: .utc)
+        case .display:
+            // Match current display settings for copy output
+            format = .humanReadable(showSeconds: showSeconds, suffix: convertDisplaySuffix(displaySuffix))
         case .unixTimestamp:
             format = .unixTimestamp
         case .rfc3339:

@@ -15,7 +15,7 @@ Display options:
 
 Copy formats:
 
-- Human Readable: `14:23:45 UTC`
+- Display: `14:23:45Z`
 - Unix Timestamp: `1733150625`
 - RFC 3339: `2025-12-02T14:23:45Z`
 
