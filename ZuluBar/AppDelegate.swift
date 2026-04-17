@@ -1,3 +1,4 @@
+import Carbon
 import Cocoa
 import ServiceManagement
 #if IS_PAID_BUILD
@@ -7,11 +8,24 @@ import Sparkle
 /// Main application delegate that manages the status bar item and user interactions
 class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
+    // MARK: - Types (Hot Key)
+
+    /// A resolved keyboard shortcut binding.
+    struct HotKey {
+        let keyCode: UInt16
+        let modifierFlags: NSEvent.ModifierFlags
+        /// Human-readable display string, e.g. "⌘⇧C".
+        let display: String
+    }
+
     // MARK: - Properties
 
     var statusItem: NSStatusItem!
     var timer: Timer?
     var isShowingFeedback = false
+    private var hotKeyRef: EventHotKeyRef?
+    private var hotKeyHandler: EventHandlerRef?
+    private var recorderPanel: HotKeyRecorderPanel?
     #if IS_PAID_BUILD
     private let updaterController = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
     #endif
@@ -31,6 +45,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         static let dateFormat = "dateFormat"
         static let displaySuffix = "displaySuffix"
         static let copyFormat = "copyFormat"
+        static let copyShortcutKeyCode = "copyShortcutKeyCode"
+        static let copyShortcutModifiers = "copyShortcutModifiers"
+        static let copyShortcutDisplay = "copyShortcutDisplay"
     }
 
     // MARK: - Types
@@ -111,6 +128,27 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         set { UserDefaults.standard.set(newValue.rawValue, forKey: UserDefaultsKeys.copyFormat) }
     }
 
+    var copyShortcut: HotKey? {
+        get {
+            guard let display = UserDefaults.standard.string(forKey: UserDefaultsKeys.copyShortcutDisplay),
+                  !display.isEmpty else { return nil }
+            let keyCode = UInt16(clamping: UserDefaults.standard.integer(forKey: UserDefaultsKeys.copyShortcutKeyCode))
+            let raw = UInt(bitPattern: UserDefaults.standard.integer(forKey: UserDefaultsKeys.copyShortcutModifiers))
+            return HotKey(keyCode: keyCode, modifierFlags: NSEvent.ModifierFlags(rawValue: raw), display: display)
+        }
+        set {
+            if let shortcut = newValue {
+                UserDefaults.standard.set(Int(shortcut.keyCode), forKey: UserDefaultsKeys.copyShortcutKeyCode)
+                UserDefaults.standard.set(Int(bitPattern: UInt(shortcut.modifierFlags.rawValue)), forKey: UserDefaultsKeys.copyShortcutModifiers)
+                UserDefaults.standard.set(shortcut.display, forKey: UserDefaultsKeys.copyShortcutDisplay)
+            } else {
+                UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.copyShortcutKeyCode)
+                UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.copyShortcutModifiers)
+                UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.copyShortcutDisplay)
+            }
+        }
+    }
+
     var launchAtLogin: Bool {
         get { SMAppService.mainApp.status == .enabled }
         set {
@@ -139,6 +177,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         #endif
 
         setupStatusItem()
+        installHotKeyHandler()
+        registerHotKey()
         updateUTC()
         startTimer()
     }
@@ -272,6 +312,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         copyFormatItem.submenu = copyFormatSubmenu
         menu.addItem(copyFormatItem)
 
+        // Copy Shortcut
+        let shortcutTitle = copyShortcut.map { "Copy Shortcut (\($0.display))" } ?? "Copy Shortcut…"
+        let copyShortcutItem = NSMenuItem(title: shortcutTitle, action: #selector(openShortcutRecorder), keyEquivalent: "")
+        menu.addItem(copyShortcutItem)
+
         menu.addItem(NSMenuItem.separator())
 
         #if IS_PAID_BUILD
@@ -385,6 +430,78 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         case .z: return .z
         case .none: return .none
         }
+    }
+
+    // MARK: - Hot Key Management
+
+    /// Installs the Carbon event handler that fires on every registered hot-key press.
+    /// Call once at launch; the handler stays alive for the app's lifetime.
+    private func installHotKeyHandler() {
+        var eventSpec = EventTypeSpec(
+            eventClass: OSType(kEventClassKeyboard),
+            eventKind: UInt32(kEventHotKeyPressed)
+        )
+        let selfPointer = Unmanaged.passUnretained(self).toOpaque()
+        InstallEventHandler(
+            GetApplicationEventTarget(),
+            { (_, _, userData) -> OSStatus in
+                guard let ptr = userData else { return OSStatus(eventNotHandledErr) }
+                let delegate = Unmanaged<AppDelegate>.fromOpaque(ptr).takeUnretainedValue()
+                delegate.copyTimeToClipboard()
+                return noErr
+            },
+            1,
+            &eventSpec,
+            selfPointer,
+            &hotKeyHandler
+        )
+    }
+
+    /// Unregisters any existing hot-key then registers the currently saved shortcut.
+    /// Safe to call with no shortcut set (becomes a no-op after unregistering).
+    func registerHotKey() {
+        unregisterHotKey()
+        guard let shortcut = copyShortcut else { return }
+
+        var carbonModifiers: UInt32 = 0
+        if shortcut.modifierFlags.contains(.command) { carbonModifiers |= UInt32(cmdKey) }
+        if shortcut.modifierFlags.contains(.shift)   { carbonModifiers |= UInt32(shiftKey) }
+        if shortcut.modifierFlags.contains(.option)  { carbonModifiers |= UInt32(optionKey) }
+        if shortcut.modifierFlags.contains(.control) { carbonModifiers |= UInt32(controlKey) }
+
+        var hotKeyID = EventHotKeyID()
+        hotKeyID.signature = 0x5A554C55  // "ZULU"
+        hotKeyID.id = 1
+
+        let status = RegisterEventHotKey(
+            UInt32(shortcut.keyCode),
+            carbonModifiers,
+            hotKeyID,
+            GetApplicationEventTarget(),
+            0,
+            &hotKeyRef
+        )
+        if status != noErr {
+            print("ZuluBar: Failed to register hotkey (error \(status))")
+        }
+    }
+
+    private func unregisterHotKey() {
+        guard let ref = hotKeyRef else { return }
+        UnregisterEventHotKey(ref)
+        hotKeyRef = nil
+    }
+
+    @objc private func openShortcutRecorder() {
+        recorderPanel?.close()
+        recorderPanel = HotKeyRecorderPanel(current: copyShortcut)
+        recorderPanel?.onShortcutChanged = { [weak self] shortcut in
+            self?.copyShortcut = shortcut
+            self?.registerHotKey()
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        recorderPanel?.makeKeyAndOrderFront(nil)
+        recorderPanel?.center()
     }
 
     // MARK: - Timer Management
