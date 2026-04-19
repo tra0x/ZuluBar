@@ -457,11 +457,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         )
     }
 
-    /// Unregisters any existing hot-key then registers the currently saved shortcut.
-    /// Safe to call with no shortcut set (becomes a no-op after unregistering).
-    func registerHotKey() {
-        unregisterHotKey()
-        guard let shortcut = copyShortcut else { return }
+    /// Attempts to register the currently saved shortcut without disturbing the existing one.
+    /// The old registration is only released after the new one succeeds, so a failed
+    /// registration leaves the previous hotkey intact. Returns whether registration succeeded.
+    @discardableResult
+    func registerHotKey() -> Bool {
+        guard let shortcut = copyShortcut else {
+            unregisterHotKey()
+            return true
+        }
 
         var carbonModifiers: UInt32 = 0
         if shortcut.modifierFlags.contains(.command) { carbonModifiers |= UInt32(cmdKey) }
@@ -473,17 +477,25 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         hotKeyID.signature = 0x5A554C55  // "ZULU"
         hotKeyID.id = 1
 
+        var newRef: EventHotKeyRef?
         let status = RegisterEventHotKey(
             UInt32(shortcut.keyCode),
             carbonModifiers,
             hotKeyID,
             GetApplicationEventTarget(),
             0,
-            &hotKeyRef
+            &newRef
         )
-        if status != noErr {
+
+        guard status == noErr, let newRef = newRef else {
             print("ZuluBar: Failed to register hotkey (error \(status))")
+            return false
         }
+
+        // New registration succeeded — safe to release the previous one
+        unregisterHotKey()
+        hotKeyRef = newRef
+        return true
     }
 
     private func unregisterHotKey() {
@@ -496,8 +508,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         recorderPanel?.close()
         recorderPanel = HotKeyRecorderPanel(current: copyShortcut)
         recorderPanel?.onShortcutChanged = { [weak self] shortcut in
-            self?.copyShortcut = shortcut
-            self?.registerHotKey()
+            guard let self = self else { return }
+            let previous = self.copyShortcut
+            self.copyShortcut = shortcut
+            if !self.registerHotKey() {
+                // Registration failed — roll back to the previous binding
+                self.copyShortcut = previous
+                self.registerHotKey()
+                self.recorderPanel?.registrationFailed()
+            }
         }
         NSApp.activate(ignoringOtherApps: true)
         recorderPanel?.makeKeyAndOrderFront(nil)

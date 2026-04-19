@@ -25,6 +25,7 @@ class HotKeyRecorderPanel: NSPanel {
     private let doneButton = NSButton()
 
     private var currentShortcut: AppDelegate.HotKey?
+    private var shortcutBeforeAttempt: AppDelegate.HotKey?
     private var isRecording = false
     private var localEventMonitor: Any?
 
@@ -184,9 +185,12 @@ class HotKeyRecorderPanel: NSPanel {
         let shortcut = AppDelegate.HotKey(keyCode: event.keyCode, modifierFlags: modifiers, display: display)
 
         stopRecording(restoreDisplay: false)
+        shortcutBeforeAttempt = currentShortcut
         currentShortcut = shortcut
         updateDisplay(animated: false)
         onShortcutChanged?(shortcut)
+        // If registration failed, registrationFailed() was called synchronously above
+        // and has already restored currentShortcut and updated the display.
     }
 
     @objc private func clearShortcut() {
@@ -194,6 +198,19 @@ class HotKeyRecorderPanel: NSPanel {
         currentShortcut = nil
         updateDisplay(animated: false)
         onShortcutChanged?(nil)
+    }
+
+    /// Called by the owner when a shortcut recorded via `onShortcutChanged` could not be
+    /// registered (e.g. the key combo is claimed by macOS or another app). Rolls the
+    /// display back to the previous binding and shows a brief error message.
+    func registrationFailed() {
+        currentShortcut = shortcutBeforeAttempt
+        shortcutLabel.stringValue = "Already claimed"
+        shortcutLabel.textColor = .systemRed
+        hintLabel.stringValue = "That combo is taken by another app"
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+            self?.updateDisplay(animated: false)
+        }
     }
 
     @objc private func done() {
