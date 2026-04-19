@@ -29,13 +29,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     #if IS_PAID_BUILD
     private let updaterController = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
     #endif
-    private lazy var dateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.timeZone = TimeZone(abbreviation: "UTC")
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.calendar = Calendar(identifier: .gregorian)
-        return formatter
-    }()
 
     // MARK: - UserDefaults Keys
 
@@ -57,26 +50,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         case display = "Display"
         case unixTimestamp = "Unix Timestamp"
         case rfc3339 = "RFC 3339"
-    }
-
-    /// Available suffixes for status bar display
-    enum DisplaySuffix: String, CaseIterable {
-        case utc = "UTC"
-        case z = "Z"
-        case none = "None"
-    }
-
-    /// Available date formats for status bar display
-    enum DateFormat: String, CaseIterable {
-        case dayMonthDate = "Tue Dec 2"
-        case dayDateMonth = "Tue 2 Dec"
-
-        var formatString: String {
-            switch self {
-            case .dayMonthDate: return "E MMM d"      // Tue Dec 2
-            case .dayDateMonth: return "E d MMM"      // Tue 2 Dec
-            }
-        }
     }
 
     // MARK: - Settings
@@ -102,10 +75,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         set { UserDefaults.standard.set(newValue.rawValue, forKey: UserDefaultsKeys.dateFormat) }
     }
 
-    var displaySuffix: DisplaySuffix {
+    var displaySuffix: UTCTimeFormatter.Suffix {
         get {
             if let rawValue = UserDefaults.standard.string(forKey: UserDefaultsKeys.displaySuffix),
-               let suffix = DisplaySuffix(rawValue: rawValue) {
+               let suffix = UTCTimeFormatter.Suffix(rawValue: rawValue) {
                 return suffix
             }
             return .z
@@ -296,7 +269,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let copyFormatItem = NSMenuItem(title: "Copy Format", action: nil, keyEquivalent: "")
         let copyFormatSubmenu = NSMenu()
 
-        let displayExample = UTCTimeFormatter.format(as: .humanReadable(showSeconds: showSeconds, suffix: convertDisplaySuffix(displaySuffix)))
+        let displayExample = UTCTimeFormatter.format(as: .humanReadable(showSeconds: showSeconds, suffix: displaySuffix))
         let displayItem = NSMenuItem(title: "Display (\(displayExample))", action: #selector(setCopyFormatDisplay), keyEquivalent: "")
         displayItem.state = copyFormat == .display ? .on : .off
         copyFormatSubmenu.addItem(displayItem)
@@ -413,7 +386,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         switch copyFormat {
         case .display:
             // Match current display settings for copy output
-            format = .humanReadable(showSeconds: showSeconds, suffix: convertDisplaySuffix(displaySuffix))
+            format = .humanReadable(showSeconds: showSeconds, suffix: displaySuffix)
         case .unixTimestamp:
             format = .unixTimestamp
         case .rfc3339:
@@ -421,15 +394,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         return UTCTimeFormatter.format(as: format)
-    }
-
-    /// Converts DisplaySuffix to UTCTimeFormatter.Suffix
-    private func convertDisplaySuffix(_ suffix: DisplaySuffix) -> UTCTimeFormatter.Suffix {
-        switch suffix {
-        case .utc: return .utc
-        case .z: return .z
-        case .none: return .none
-        }
     }
 
     // MARK: - Hot Key Management
@@ -553,19 +517,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // Don't update if showing feedback
         guard !isShowingFeedback else { return }
 
-        var displayText = ""
-
-        // Add date if enabled
-        if showDate {
-            dateFormatter.dateFormat = dateFormat.formatString
-            displayText = dateFormatter.string(from: Date()) + " "
-        }
-
-        // Add time
-        let suffix = convertDisplaySuffix(displaySuffix)
-        let format = UTCTimeFormatter.Format.humanReadable(showSeconds: showSeconds, suffix: suffix)
-        displayText += UTCTimeFormatter.format(as: format)
-
-        statusItem.button?.title = displayText
+        let display = StatusBarDisplay(
+            dateFormat: showDate ? dateFormat : nil,
+            timeFormat: .humanReadable(showSeconds: showSeconds, suffix: displaySuffix)
+        )
+        statusItem.button?.title = StatusBarRenderer.render(display)
     }
 }
