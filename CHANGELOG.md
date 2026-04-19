@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-04-19
+
+### Added
+- Configurable global copy shortcut — set a system-wide hotkey to copy the current time without clicking the menu bar icon
+- Shortcut recorder panel with Record, Clear, and Done actions
+- Existing shortcut is preserved if a new binding cannot be registered (e.g. claimed by macOS or another app)
+
 ## [0.1.0] - 2026-02-24
 
 ### Added
@@ -22,5 +29,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - RFC 3339 (`2025-12-02T14:23:45Z`)
 - All preferences persisted via UserDefaults
 
-[unreleased]: https://github.com/tra0x/ZuluBar/compare/v0.1.0...HEAD
+[unreleased]: https://github.com/tra0x/ZuluBar/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/tra0x/ZuluBar/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/tra0x/ZuluBar/releases/tag/v0.1.0
