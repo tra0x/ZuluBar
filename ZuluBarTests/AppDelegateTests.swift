@@ -149,11 +149,13 @@ final class AppDelegateTests: XCTestCase {
 
     func testSettingsWriteDoesNotTouchStandardDefaults() {
         // Sanity: make sure a flipped setting in this test doesn't leak
-        // into UserDefaults.standard.
+        // into UserDefaults.standard. Write the negation of whatever
+        // standard currently holds so that an accidental passthrough
+        // write is guaranteed to flip the observed value.
         let standard = UserDefaults.standard
-        let prior = standard.object(forKey: "showSeconds")
-        delegate.settings.showSeconds = false
-        XCTAssertEqual(standard.object(forKey: "showSeconds") as? Bool, prior as? Bool,
+        let prior = (standard.object(forKey: "showSeconds") as? Bool) ?? true
+        delegate.settings.showSeconds = !prior
+        XCTAssertEqual(standard.object(forKey: "showSeconds") as? Bool ?? true, prior,
                        "Test write should not have mutated UserDefaults.standard")
     }
 }
