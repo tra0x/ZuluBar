@@ -1,126 +1,25 @@
-import Carbon
 import Cocoa
 import ServiceManagement
 #if IS_PAID_BUILD
 import Sparkle
 #endif
 
-/// Main application delegate that manages the status bar item and user interactions
+/// Main application delegate that manages the status bar item and user interactions.
 class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
-
-    // MARK: - Types (Hot Key)
-
-    /// A resolved keyboard shortcut binding.
-    struct HotKey {
-        let keyCode: UInt16
-        let modifierFlags: NSEvent.ModifierFlags
-        /// Human-readable display string, e.g. "⌘⇧C".
-        let display: String
-    }
 
     // MARK: - Properties
 
     var statusItem: NSStatusItem!
     var timer: Timer?
     var isShowingFeedback = false
-    private var hotKeyRef: EventHotKeyRef?
-    private var hotKeyHandler: EventHandlerRef?
+    var settings = Settings()
+    private let hotKeyManager = HotKeyManager()
     private var recorderPanel: HotKeyRecorderPanel?
     #if IS_PAID_BUILD
     private let updaterController = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
     #endif
 
-    // MARK: - UserDefaults Keys
-
-    private enum UserDefaultsKeys {
-        static let showSeconds = "showSeconds"
-        static let showDate = "showDate"
-        static let dateFormat = "dateFormat"
-        static let displaySuffix = "displaySuffix"
-        static let copyFormat = "copyFormat"
-        static let copyShortcutKeyCode = "copyShortcutKeyCode"
-        static let copyShortcutModifiers = "copyShortcutModifiers"
-        static let copyShortcutDisplay = "copyShortcutDisplay"
-    }
-
-    // MARK: - Types
-
-    /// Available formats for copying time to clipboard
-    enum CopyFormat: String, CaseIterable {
-        case display = "Display"
-        case unixTimestamp = "Unix Timestamp"
-        case rfc3339 = "RFC 3339"
-    }
-
-    // MARK: - Settings
-
-    var showSeconds: Bool {
-        get { UserDefaults.standard.object(forKey: UserDefaultsKeys.showSeconds) as? Bool ?? true }
-        set { UserDefaults.standard.set(newValue, forKey: UserDefaultsKeys.showSeconds) }
-    }
-
-    var showDate: Bool {
-        get { UserDefaults.standard.object(forKey: UserDefaultsKeys.showDate) as? Bool ?? false }
-        set { UserDefaults.standard.set(newValue, forKey: UserDefaultsKeys.showDate) }
-    }
-
-    var dateFormat: DateFormat {
-        get {
-            if let rawValue = UserDefaults.standard.string(forKey: UserDefaultsKeys.dateFormat),
-               let format = DateFormat(rawValue: rawValue) {
-                return format
-            }
-            return .dayMonthDate
-        }
-        set { UserDefaults.standard.set(newValue.rawValue, forKey: UserDefaultsKeys.dateFormat) }
-    }
-
-    var displaySuffix: UTCTimeFormatter.Suffix {
-        get {
-            if let rawValue = UserDefaults.standard.string(forKey: UserDefaultsKeys.displaySuffix),
-               let suffix = UTCTimeFormatter.Suffix(rawValue: rawValue) {
-                return suffix
-            }
-            return .z
-        }
-        set { UserDefaults.standard.set(newValue.rawValue, forKey: UserDefaultsKeys.displaySuffix) }
-    }
-
-    var copyFormat: CopyFormat {
-        get {
-            if let rawValue = UserDefaults.standard.string(forKey: UserDefaultsKeys.copyFormat) {
-                if rawValue == "Human Readable" {
-                    return .display
-                }
-                if let format = CopyFormat(rawValue: rawValue) {
-                    return format
-                }
-            }
-            return .display
-        }
-        set { UserDefaults.standard.set(newValue.rawValue, forKey: UserDefaultsKeys.copyFormat) }
-    }
-
-    var copyShortcut: HotKey? {
-        get {
-            guard let display = UserDefaults.standard.string(forKey: UserDefaultsKeys.copyShortcutDisplay),
-                  !display.isEmpty else { return nil }
-            let keyCode = UInt16(clamping: UserDefaults.standard.integer(forKey: UserDefaultsKeys.copyShortcutKeyCode))
-            let raw = UInt(bitPattern: UserDefaults.standard.integer(forKey: UserDefaultsKeys.copyShortcutModifiers))
-            return HotKey(keyCode: keyCode, modifierFlags: NSEvent.ModifierFlags(rawValue: raw), display: display)
-        }
-        set {
-            if let shortcut = newValue {
-                UserDefaults.standard.set(Int(shortcut.keyCode), forKey: UserDefaultsKeys.copyShortcutKeyCode)
-                UserDefaults.standard.set(Int(bitPattern: UInt(shortcut.modifierFlags.rawValue)), forKey: UserDefaultsKeys.copyShortcutModifiers)
-                UserDefaults.standard.set(shortcut.display, forKey: UserDefaultsKeys.copyShortcutDisplay)
-            } else {
-                UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.copyShortcutKeyCode)
-                UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.copyShortcutModifiers)
-                UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.copyShortcutDisplay)
-            }
-        }
-    }
+    // MARK: - Launch at Login
 
     var launchAtLogin: Bool {
         get { SMAppService.mainApp.status == .enabled }
@@ -150,15 +49,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         #endif
 
         setupStatusItem()
-        installHotKeyHandler()
-        registerHotKey()
+        hotKeyManager.onTrigger = { [weak self] in self?.copyTimeToClipboard() }
+        hotKeyManager.activate(settings.copyShortcut)
         updateUTC()
         startTimer()
     }
 
     // MARK: - Setup
 
-    /// Configures the status bar item with appropriate styling and click handlers
+    /// Configures the status bar item with appropriate styling and click handlers.
     private func setupStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.button?.font = .monospacedDigitSystemFont(ofSize: 12, weight: .regular)
@@ -169,9 +68,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // MARK: - User Interaction
 
-    /// Handles clicks on the status bar item
-    /// - Left click: Copies current time to clipboard
-    /// - Right click: Shows options menu
+    /// Handles clicks on the status bar item.
+    /// - Left click: copies current time to clipboard.
+    /// - Right click: shows options menu.
     @objc func statusItemClicked() {
         guard let event = NSApp.currentEvent else { return }
 
@@ -182,7 +81,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    /// Shows the options menu below the status bar item
+    /// Shows the options menu below the status bar item.
     private func showOptionsMenu() {
         let menu = setupMenu()
         menu.delegate = self
@@ -193,7 +92,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    /// Copies the current time to clipboard and shows visual feedback
+    /// Copies the current time to clipboard and shows visual feedback.
     private func copyTimeToClipboard() {
         let textToCopy = getFormattedTimeForCopy()
         let pasteboard = NSPasteboard.general
@@ -203,7 +102,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         showCopiedFeedback()
     }
 
-    /// Displays "Copied!" message briefly in the status bar
+    /// Displays "Copied!" message briefly in the status bar.
     private func showCopiedFeedback() {
         isShowingFeedback = true
         statusItem.button?.title = "✓ Copied"
@@ -217,14 +116,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // MARK: - Menu Setup
 
-    /// Creates and configures the options menu
-    /// - Returns: Configured NSMenu with all options
+    /// Creates and configures the options menu.
     private func setupMenu() -> NSMenu {
         let menu = NSMenu()
 
         // Display seconds toggle
         let showSecondsItem = NSMenuItem(title: "Display Seconds", action: #selector(toggleSeconds), keyEquivalent: "")
-        showSecondsItem.state = showSeconds ? .on : .off
+        showSecondsItem.state = settings.showSeconds ? .on : .off
         menu.addItem(showSecondsItem)
 
         // Date Format submenu
@@ -232,15 +130,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let dateFormatSubmenu = NSMenu()
 
         let noneItem = NSMenuItem(title: "None", action: #selector(setDateFormatNone), keyEquivalent: "")
-        noneItem.state = !showDate ? .on : .off
+        noneItem.state = !settings.showDate ? .on : .off
         dateFormatSubmenu.addItem(noneItem)
 
         let dayMonthDateItem = NSMenuItem(title: "Tue Dec 2", action: #selector(setDateFormatDayMonthDate), keyEquivalent: "")
-        dayMonthDateItem.state = (showDate && dateFormat == .dayMonthDate) ? .on : .off
+        dayMonthDateItem.state = (settings.showDate && settings.dateFormat == .dayMonthDate) ? .on : .off
         dateFormatSubmenu.addItem(dayMonthDateItem)
 
         let dayDateMonthItem = NSMenuItem(title: "Tue 2 Dec", action: #selector(setDateFormatDayDateMonth), keyEquivalent: "")
-        dayDateMonthItem.state = (showDate && dateFormat == .dayDateMonth) ? .on : .off
+        dayDateMonthItem.state = (settings.showDate && settings.dateFormat == .dayDateMonth) ? .on : .off
         dateFormatSubmenu.addItem(dayDateMonthItem)
 
         dateFormatItem.submenu = dateFormatSubmenu
@@ -251,15 +149,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let displaySuffixSubmenu = NSMenu()
 
         let zSuffixItem = NSMenuItem(title: "Z (14:23:45Z)", action: #selector(setDisplaySuffixZ), keyEquivalent: "")
-        zSuffixItem.state = displaySuffix == .z ? .on : .off
+        zSuffixItem.state = settings.displaySuffix == .z ? .on : .off
         displaySuffixSubmenu.addItem(zSuffixItem)
 
         let utcSuffixItem = NSMenuItem(title: "UTC (14:23:45 UTC)", action: #selector(setDisplaySuffixUTC), keyEquivalent: "")
-        utcSuffixItem.state = displaySuffix == .utc ? .on : .off
+        utcSuffixItem.state = settings.displaySuffix == .utc ? .on : .off
         displaySuffixSubmenu.addItem(utcSuffixItem)
 
         let noneSuffixItem = NSMenuItem(title: "None (14:23:45)", action: #selector(setDisplaySuffixNone), keyEquivalent: "")
-        noneSuffixItem.state = displaySuffix == .none ? .on : .off
+        noneSuffixItem.state = settings.displaySuffix == .none ? .on : .off
         displaySuffixSubmenu.addItem(noneSuffixItem)
 
         displaySuffixItem.submenu = displaySuffixSubmenu
@@ -269,24 +167,24 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let copyFormatItem = NSMenuItem(title: "Copy Format", action: nil, keyEquivalent: "")
         let copyFormatSubmenu = NSMenu()
 
-        let displayExample = UTCTimeFormatter.format(as: .humanReadable(showSeconds: showSeconds, suffix: displaySuffix))
+        let displayExample = UTCTimeFormatter.format(as: .humanReadable(showSeconds: settings.showSeconds, suffix: settings.displaySuffix))
         let displayItem = NSMenuItem(title: "Display (\(displayExample))", action: #selector(setCopyFormatDisplay), keyEquivalent: "")
-        displayItem.state = copyFormat == .display ? .on : .off
+        displayItem.state = settings.copyFormat == .display ? .on : .off
         copyFormatSubmenu.addItem(displayItem)
 
         let unixTimestampItem = NSMenuItem(title: "Unix Timestamp (1733150625)", action: #selector(setCopyFormatUnixTimestamp), keyEquivalent: "")
-        unixTimestampItem.state = copyFormat == .unixTimestamp ? .on : .off
+        unixTimestampItem.state = settings.copyFormat == .unixTimestamp ? .on : .off
         copyFormatSubmenu.addItem(unixTimestampItem)
 
         let rfc3339Item = NSMenuItem(title: "RFC 3339 (2025-12-02T14:23:45Z)", action: #selector(setCopyFormatRFC3339), keyEquivalent: "")
-        rfc3339Item.state = copyFormat == .rfc3339 ? .on : .off
+        rfc3339Item.state = settings.copyFormat == .rfc3339 ? .on : .off
         copyFormatSubmenu.addItem(rfc3339Item)
 
         copyFormatItem.submenu = copyFormatSubmenu
         menu.addItem(copyFormatItem)
 
         // Copy Shortcut
-        let shortcutTitle = copyShortcut.map { "Copy Shortcut (\($0.display))" } ?? "Copy Shortcut…"
+        let shortcutTitle = settings.copyShortcut.map { "Copy Shortcut (\($0.display))" } ?? "Copy Shortcut…"
         let copyShortcutItem = NSMenuItem(title: shortcutTitle, action: #selector(openShortcutRecorder), keyEquivalent: "")
         menu.addItem(copyShortcutItem)
 
@@ -312,53 +210,53 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // MARK: - Menu Actions
 
     @objc func toggleSeconds(_ sender: NSMenuItem) {
-        showSeconds.toggle()
-        sender.state = showSeconds ? .on : .off
+        settings.showSeconds.toggle()
+        sender.state = settings.showSeconds ? .on : .off
         updateUTC()
     }
 
     @objc func setDateFormatNone() {
-        showDate = false
+        settings.showDate = false
         updateUTC()
     }
 
     @objc func setDateFormatDayMonthDate() {
-        showDate = true
-        dateFormat = .dayMonthDate
+        settings.showDate = true
+        settings.dateFormat = .dayMonthDate
         updateUTC()
     }
 
     @objc func setDateFormatDayDateMonth() {
-        showDate = true
-        dateFormat = .dayDateMonth
+        settings.showDate = true
+        settings.dateFormat = .dayDateMonth
         updateUTC()
     }
 
     @objc func setDisplaySuffixUTC() {
-        displaySuffix = .utc
+        settings.displaySuffix = .utc
         updateUTC()
     }
 
     @objc func setDisplaySuffixZ() {
-        displaySuffix = .z
+        settings.displaySuffix = .z
         updateUTC()
     }
 
     @objc func setDisplaySuffixNone() {
-        displaySuffix = .none
+        settings.displaySuffix = .none
         updateUTC()
     }
 
     @objc func setCopyFormatDisplay() {
-        copyFormat = .display
+        settings.copyFormat = .display
     }
 
     @objc func setCopyFormatUnixTimestamp() {
-        copyFormat = .unixTimestamp
+        settings.copyFormat = .unixTimestamp
     }
 
     @objc func setCopyFormatRFC3339() {
-        copyFormat = .rfc3339
+        settings.copyFormat = .rfc3339
     }
 
     #if IS_PAID_BUILD
@@ -378,15 +276,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // MARK: - Time Formatting
 
-    /// Formats the current time according to the selected copy format
-    /// - Returns: Formatted time string ready for clipboard
+    /// Formats the current time according to the selected copy format.
     func getFormattedTimeForCopy() -> String {
         let format: UTCTimeFormatter.Format
 
-        switch copyFormat {
+        switch settings.copyFormat {
         case .display:
             // Match current display settings for copy output
-            format = .humanReadable(showSeconds: showSeconds, suffix: displaySuffix)
+            format = .humanReadable(showSeconds: settings.showSeconds, suffix: settings.displaySuffix)
         case .unixTimestamp:
             format = .unixTimestamp
         case .rfc3339:
@@ -396,89 +293,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return UTCTimeFormatter.format(as: format)
     }
 
-    // MARK: - Hot Key Management
-
-    /// Installs the Carbon event handler that fires on every registered hot-key press.
-    /// Call once at launch; the handler stays alive for the app's lifetime.
-    private func installHotKeyHandler() {
-        var eventSpec = EventTypeSpec(
-            eventClass: OSType(kEventClassKeyboard),
-            eventKind: UInt32(kEventHotKeyPressed)
-        )
-        let selfPointer = Unmanaged.passUnretained(self).toOpaque()
-        InstallEventHandler(
-            GetApplicationEventTarget(),
-            { (_, _, userData) -> OSStatus in
-                guard let ptr = userData else { return OSStatus(eventNotHandledErr) }
-                let delegate = Unmanaged<AppDelegate>.fromOpaque(ptr).takeUnretainedValue()
-                delegate.copyTimeToClipboard()
-                return noErr
-            },
-            1,
-            &eventSpec,
-            selfPointer,
-            &hotKeyHandler
-        )
-    }
-
-    /// Attempts to register the currently saved shortcut without disturbing the existing one.
-    /// The old registration is only released after the new one succeeds, so a failed
-    /// registration leaves the previous hotkey intact. Returns whether registration succeeded.
-    @discardableResult
-    func registerHotKey() -> Bool {
-        guard let shortcut = copyShortcut else {
-            unregisterHotKey()
-            return true
-        }
-
-        var carbonModifiers: UInt32 = 0
-        if shortcut.modifierFlags.contains(.command) { carbonModifiers |= UInt32(cmdKey) }
-        if shortcut.modifierFlags.contains(.shift)   { carbonModifiers |= UInt32(shiftKey) }
-        if shortcut.modifierFlags.contains(.option)  { carbonModifiers |= UInt32(optionKey) }
-        if shortcut.modifierFlags.contains(.control) { carbonModifiers |= UInt32(controlKey) }
-
-        var hotKeyID = EventHotKeyID()
-        hotKeyID.signature = 0x5A554C55  // "ZULU"
-        hotKeyID.id = 1
-
-        var newRef: EventHotKeyRef?
-        let status = RegisterEventHotKey(
-            UInt32(shortcut.keyCode),
-            carbonModifiers,
-            hotKeyID,
-            GetApplicationEventTarget(),
-            0,
-            &newRef
-        )
-
-        guard status == noErr, let newRef = newRef else {
-            print("ZuluBar: Failed to register hotkey (error \(status))")
-            return false
-        }
-
-        // New registration succeeded — safe to release the previous one
-        unregisterHotKey()
-        hotKeyRef = newRef
-        return true
-    }
-
-    private func unregisterHotKey() {
-        guard let ref = hotKeyRef else { return }
-        UnregisterEventHotKey(ref)
-        hotKeyRef = nil
-    }
+    // MARK: - Shortcut Recorder
 
     @objc private func openShortcutRecorder() {
         recorderPanel?.close()
-        recorderPanel = HotKeyRecorderPanel(current: copyShortcut)
+        recorderPanel = HotKeyRecorderPanel(current: settings.copyShortcut)
         recorderPanel?.onShortcutChanged = { [weak self] shortcut in
             guard let self = self else { return }
-            let previous = self.copyShortcut
-            self.copyShortcut = shortcut
-            if !self.registerHotKey() {
-                // Registration failed — roll back to the previous binding
-                self.copyShortcut = previous
-                self.registerHotKey()
+            if self.hotKeyManager.activate(shortcut) {
+                // Persist only after Carbon registration succeeds, so UserDefaults
+                // and the live binding can never drift out of sync.
+                self.settings.copyShortcut = shortcut
+            } else {
                 self.recorderPanel?.registrationFailed()
             }
         }
@@ -489,8 +315,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // MARK: - Timer Management
 
-    /// Starts the timer that updates the status bar display
-    /// Syncs to the next whole second for precise timing
+    /// Starts the timer that updates the status bar display, synced to the next whole second.
     func startTimer() {
         // Calculate time until next whole second for precise sync
         let now = Date()
@@ -512,14 +337,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         RunLoop.main.add(syncTimer, forMode: .common)
     }
 
-    /// Updates the status bar with the current UTC time
+    /// Updates the status bar with the current UTC time.
     func updateUTC() {
-        // Don't update if showing feedback
         guard !isShowingFeedback else { return }
 
         let display = StatusBarDisplay(
-            dateFormat: showDate ? dateFormat : nil,
-            timeFormat: .humanReadable(showSeconds: showSeconds, suffix: displaySuffix)
+            dateFormat: settings.showDate ? settings.dateFormat : nil,
+            timeFormat: .humanReadable(showSeconds: settings.showSeconds, suffix: settings.displaySuffix)
         )
         statusItem.button?.title = StatusBarRenderer.render(display)
     }

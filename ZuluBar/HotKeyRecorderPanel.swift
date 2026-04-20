@@ -5,7 +5,7 @@ import Carbon
 ///
 /// Usage:
 /// ```swift
-/// let panel = HotKeyRecorderPanel(current: copyShortcut)
+/// let panel = HotKeyRecorderPanel(current: settings.copyShortcut)
 /// panel.onShortcutChanged = { [weak self] shortcut in ... }
 /// panel.makeKeyAndOrderFront(nil)
 /// ```
@@ -14,7 +14,7 @@ class HotKeyRecorderPanel: NSPanel {
     // MARK: - Public
 
     /// Called immediately when the user records a new shortcut or clears the existing one.
-    var onShortcutChanged: ((AppDelegate.HotKey?) -> Void)?
+    var onShortcutChanged: ((HotKey?) -> Void)?
 
     // MARK: - Private
 
@@ -24,14 +24,14 @@ class HotKeyRecorderPanel: NSPanel {
     private let clearButton = NSButton()
     private let doneButton = NSButton()
 
-    private var currentShortcut: AppDelegate.HotKey?
-    private var shortcutBeforeAttempt: AppDelegate.HotKey?
+    private var currentShortcut: HotKey?
+    private var shortcutBeforeAttempt: HotKey?
     private var isRecording = false
     private var localEventMonitor: Any?
 
     // MARK: - Init
 
-    init(current: AppDelegate.HotKey?) {
+    init(current: HotKey?) {
         self.currentShortcut = current
         super.init(
             contentRect: NSRect(x: 0, y: 0, width: 300, height: 150),
@@ -181,8 +181,7 @@ class HotKeyRecorderPanel: NSPanel {
             return
         }
 
-        let display = buildDisplayString(keyCode: event.keyCode, modifiers: modifiers)
-        let shortcut = AppDelegate.HotKey(keyCode: event.keyCode, modifierFlags: modifiers, display: display)
+        let shortcut = HotKey(keyCode: event.keyCode, modifierFlags: modifiers)
 
         stopRecording(restoreDisplay: false)
         shortcutBeforeAttempt = currentShortcut
@@ -223,61 +222,5 @@ class HotKeyRecorderPanel: NSPanel {
     override func close() {
         stopRecording(restoreDisplay: false)
         super.close()
-    }
-
-    // MARK: - Key Name Helpers
-
-    private func buildDisplayString(keyCode: UInt16, modifiers: NSEvent.ModifierFlags) -> String {
-        var result = ""
-        if modifiers.contains(.control) { result += "⌃" }
-        if modifiers.contains(.option)  { result += "⌥" }
-        if modifiers.contains(.shift)   { result += "⇧" }
-        if modifiers.contains(.command) { result += "⌘" }
-        result += keyName(for: keyCode)
-        return result
-    }
-
-    private func keyName(for keyCode: UInt16) -> String {
-        // Named keys that UCKeyTranslate doesn't produce useful strings for
-        let namedKeys: [UInt16: String] = [
-            36: "↩", 48: "⇥", 49: "Space", 51: "⌫", 53: "⎋",
-            96: "F5", 97: "F6", 98: "F7", 99: "F3", 100: "F8",
-            101: "F9", 103: "F11", 105: "F13", 107: "F14", 109: "F10",
-            111: "F12", 113: "F15", 115: "↖", 116: "⇞", 117: "⌦",
-            118: "F4", 119: "↘", 120: "F2", 121: "⇟", 122: "F1",
-            123: "←", 124: "→", 125: "↓", 126: "↑",
-        ]
-        if let name = namedKeys[keyCode] { return name }
-        return characterName(for: keyCode) ?? "(\(keyCode))"
-    }
-
-    /// Translates a virtual key code to its unmodified character using the current keyboard layout.
-    private func characterName(for keyCode: UInt16) -> String? {
-        guard let inputSource = TISCopyCurrentKeyboardLayoutInputSource()?.takeRetainedValue() else { return nil }
-        guard let layoutDataRef = TISGetInputSourceProperty(inputSource, kTISPropertyUnicodeKeyLayoutData) else { return nil }
-        let layoutData = Unmanaged<CFData>.fromOpaque(layoutDataRef).takeUnretainedValue() as Data
-
-        return layoutData.withUnsafeBytes { rawBuffer -> String? in
-            guard let layoutPtr = rawBuffer.baseAddress?.assumingMemoryBound(to: UCKeyboardLayout.self) else { return nil }
-            var deadKeyState: UInt32 = 0
-            var unicodeChars = [UniChar](repeating: 0, count: 4)
-            var charCount = 0
-            let status = UCKeyTranslate(
-                layoutPtr,
-                keyCode,
-                UInt16(kUCKeyActionDisplay),
-                0,
-                UInt32(LMGetKbdType()),
-                OptionBits(kUCKeyTranslateNoDeadKeysBit),
-                &deadKeyState,
-                4,
-                &charCount,
-                &unicodeChars
-            )
-            guard status == noErr, charCount > 0 else { return nil }
-            let scalars = unicodeChars[0..<charCount].compactMap { Unicode.Scalar(UInt32($0)) }
-            let string = String(String.UnicodeScalarView(scalars)).uppercased()
-            return string.isEmpty ? nil : string
-        }
     }
 }

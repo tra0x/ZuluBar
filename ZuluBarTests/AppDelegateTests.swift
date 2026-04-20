@@ -25,81 +25,82 @@ final class AppDelegateTests: XCTestCase {
     // MARK: - Default Values
 
     func testShowSecondsDefaultIsTrue() {
-        XCTAssertTrue(delegate.showSeconds)
+        XCTAssertTrue(delegate.settings.showSeconds)
     }
 
     func testShowDateDefaultIsFalse() {
-        XCTAssertFalse(delegate.showDate)
+        XCTAssertFalse(delegate.settings.showDate)
     }
 
-    func testDisplaySuffixDefaultIsUTC() {
-        XCTAssertEqual(delegate.displaySuffix, .z)
+    func testDisplaySuffixDefaultIsZ() {
+        XCTAssertEqual(delegate.settings.displaySuffix, .z)
     }
 
     func testCopyFormatDefaultIsDisplay() {
-        XCTAssertEqual(delegate.copyFormat, .display)
+        XCTAssertEqual(delegate.settings.copyFormat, .display)
     }
 
     func testDateFormatDefaultIsDayMonthDate() {
-        XCTAssertEqual(delegate.dateFormat, .dayMonthDate)
+        XCTAssertEqual(delegate.settings.dateFormat, .dayMonthDate)
     }
 
     // MARK: - Settings Persistence
 
     func testShowSecondsPersists() {
-        delegate.showSeconds = false
-        XCTAssertFalse(delegate.showSeconds)
+        delegate.settings.showSeconds = false
+        XCTAssertFalse(delegate.settings.showSeconds)
         XCTAssertFalse(defaults.bool(forKey: "showSeconds"))
     }
 
     func testShowDatePersists() {
-        delegate.showDate = true
-        XCTAssertTrue(delegate.showDate)
+        delegate.settings.showDate = true
+        XCTAssertTrue(delegate.settings.showDate)
         XCTAssertTrue(defaults.bool(forKey: "showDate"))
     }
 
     func testDisplaySuffixPersists() {
-        delegate.displaySuffix = .z
-        XCTAssertEqual(delegate.displaySuffix, .z)
+        delegate.settings.displaySuffix = .z
+        XCTAssertEqual(delegate.settings.displaySuffix, .z)
         XCTAssertEqual(defaults.string(forKey: "displaySuffix"), "Z")
     }
 
     func testCopyFormatPersists() {
-        delegate.copyFormat = .rfc3339
-        XCTAssertEqual(delegate.copyFormat, .rfc3339)
+        delegate.settings.copyFormat = .rfc3339
+        XCTAssertEqual(delegate.settings.copyFormat, .rfc3339)
         XCTAssertEqual(defaults.string(forKey: "copyFormat"), "RFC 3339")
     }
 
     func testDateFormatPersists() {
-        delegate.dateFormat = .dayDateMonth
-        XCTAssertEqual(delegate.dateFormat, .dayDateMonth)
+        delegate.settings.dateFormat = .dayDateMonth
+        XCTAssertEqual(delegate.settings.dateFormat, .dayDateMonth)
         XCTAssertEqual(defaults.string(forKey: "dateFormat"), "Tue 2 Dec")
     }
 
     // MARK: - Copy Shortcut
 
     func testCopyShortcutDefaultIsNil() {
-        XCTAssertNil(delegate.copyShortcut)
+        XCTAssertNil(delegate.settings.copyShortcut)
     }
 
     func testCopyShortcutPersists() {
-        let shortcut = AppDelegate.HotKey(
-            keyCode: 8,
-            modifierFlags: [.command],
-            display: "⌘C"
-        )
-        delegate.copyShortcut = shortcut
-        XCTAssertEqual(delegate.copyShortcut?.keyCode, 8)
-        XCTAssertEqual(delegate.copyShortcut?.display, "⌘C")
-        XCTAssertTrue(delegate.copyShortcut?.modifierFlags.contains(.command) == true)
+        let shortcut = HotKey(keyCode: 8, modifierFlags: [.command])
+        delegate.settings.copyShortcut = shortcut
+        XCTAssertEqual(delegate.settings.copyShortcut?.keyCode, 8)
+        XCTAssertTrue(delegate.settings.copyShortcut?.modifierFlags.contains(.command) == true)
         XCTAssertEqual(defaults.integer(forKey: "copyShortcutKeyCode"), 8)
-        XCTAssertEqual(defaults.string(forKey: "copyShortcutDisplay"), "⌘C")
+    }
+
+    func testCopyShortcutDisplayIsComputed() {
+        // keyCode 8 is "C" on a US keyboard; combined with ⌘ the display should start with ⌘.
+        let shortcut = HotKey(keyCode: 8, modifierFlags: [.command])
+        delegate.settings.copyShortcut = shortcut
+        XCTAssertTrue(delegate.settings.copyShortcut?.display.hasPrefix("⌘") == true)
     }
 
     func testCopyShortcutClearRemovesAllKeys() {
-        delegate.copyShortcut = AppDelegate.HotKey(keyCode: 8, modifierFlags: [.command], display: "⌘C")
-        delegate.copyShortcut = nil
-        XCTAssertNil(delegate.copyShortcut)
+        delegate.settings.copyShortcut = HotKey(keyCode: 8, modifierFlags: [.command])
+        delegate.settings.copyShortcut = nil
+        XCTAssertNil(delegate.settings.copyShortcut)
         XCTAssertNil(defaults.object(forKey: "copyShortcutKeyCode"))
         XCTAssertNil(defaults.object(forKey: "copyShortcutModifiers"))
         XCTAssertNil(defaults.object(forKey: "copyShortcutDisplay"))
@@ -107,8 +108,8 @@ final class AppDelegateTests: XCTestCase {
 
     func testCopyShortcutModifierRoundTrip() {
         let flags: NSEvent.ModifierFlags = [.command, .shift]
-        delegate.copyShortcut = AppDelegate.HotKey(keyCode: 3, modifierFlags: flags, display: "⌘⇧F")
-        let recovered = delegate.copyShortcut
+        delegate.settings.copyShortcut = HotKey(keyCode: 3, modifierFlags: flags)
+        let recovered = delegate.settings.copyShortcut
         XCTAssertNotNil(recovered)
         XCTAssertTrue(recovered?.modifierFlags.contains(.command) == true)
         XCTAssertTrue(recovered?.modifierFlags.contains(.shift) == true)
@@ -119,14 +120,14 @@ final class AppDelegateTests: XCTestCase {
     // MARK: - Copy Format Output
 
     func testCopyDisplayMatchesSuffix() {
-        delegate.copyFormat = .display
+        delegate.settings.copyFormat = .display
         let result = delegate.getFormattedTimeForCopy()
         XCTAssertTrue(result.hasSuffix("Z"), "Expected Z suffix, got: \(result)")
         XCTAssertTrue(result.contains(":"), "Expected time with colons, got: \(result)")
     }
 
     func testCopyUnixTimestampIsInteger() {
-        delegate.copyFormat = .unixTimestamp
+        delegate.settings.copyFormat = .unixTimestamp
         let result = delegate.getFormattedTimeForCopy()
         let timestamp = Int(result)
         XCTAssertNotNil(timestamp, "Expected integer, got: \(result)")
@@ -134,7 +135,7 @@ final class AppDelegateTests: XCTestCase {
     }
 
     func testCopyRFC3339Format() {
-        delegate.copyFormat = .rfc3339
+        delegate.settings.copyFormat = .rfc3339
         let result = delegate.getFormattedTimeForCopy()
         let regex = try! NSRegularExpression(pattern: #"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$"#)
         let match = regex.firstMatch(in: result, range: NSRange(result.startIndex..., in: result))
