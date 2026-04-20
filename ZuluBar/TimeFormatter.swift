@@ -12,13 +12,15 @@ struct UTCTimeFormatter {
         case rfc3339
     }
 
-    /// Available suffixes for human-readable format
-    enum Suffix {
-        case utc
-        case z
-        case none
+    /// Available suffixes for human-readable format.
+    /// `rawValue` is the persisted identifier; `displayString` is what gets
+    /// appended to the formatted time.
+    enum Suffix: String, CaseIterable {
+        case utc = "UTC"
+        case z = "Z"
+        case none = "None"
 
-        var stringValue: String {
+        var displayString: String {
             switch self {
             case .utc: return " UTC"
             case .z: return "Z"
@@ -59,7 +61,7 @@ struct UTCTimeFormatter {
         switch format {
         case .humanReadable(let showSeconds, let suffix):
             let formatter = showSeconds ? humanReadableFormatterSeconds : humanReadableFormatterNoSeconds
-            return formatter.string(from: date) + suffix.stringValue
+            return formatter.string(from: date) + suffix.displayString
 
         case .unixTimestamp:
             return String(Int(date.timeIntervalSince1970))
