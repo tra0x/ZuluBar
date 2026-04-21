@@ -4,21 +4,24 @@ import XCTest
 final class AppDelegateTests: XCTestCase {
 
     private var delegate: AppDelegate!
-    private let defaults = UserDefaults.standard
-    private let testKeys = [
-        "showSeconds", "showDate", "dateFormat", "displaySuffix", "copyFormat",
-        "copyShortcutKeyCode", "copyShortcutModifiers", "copyShortcutDisplay",
-    ]
+    private var suiteName: String!
+    private var testDefaults: UserDefaults!
 
     override func setUp() {
         super.setUp()
-        testKeys.forEach { defaults.removeObject(forKey: $0) }
+        // Scoped UserDefaults suite so tests don't pollute — or get polluted by —
+        // the real app's settings in UserDefaults.standard.
+        suiteName = "com.zulubar.tests.\(UUID().uuidString)"
+        testDefaults = UserDefaults(suiteName: suiteName)
         delegate = AppDelegate()
+        delegate.settings = Settings(defaults: testDefaults)
     }
 
     override func tearDown() {
-        testKeys.forEach { defaults.removeObject(forKey: $0) }
+        testDefaults.removePersistentDomain(forName: suiteName)
         delegate = nil
+        testDefaults = nil
+        suiteName = nil
         super.tearDown()
     }
 
@@ -49,31 +52,31 @@ final class AppDelegateTests: XCTestCase {
     func testShowSecondsPersists() {
         delegate.settings.showSeconds = false
         XCTAssertFalse(delegate.settings.showSeconds)
-        XCTAssertFalse(defaults.bool(forKey: "showSeconds"))
+        XCTAssertFalse(testDefaults.bool(forKey: "showSeconds"))
     }
 
     func testShowDatePersists() {
         delegate.settings.showDate = true
         XCTAssertTrue(delegate.settings.showDate)
-        XCTAssertTrue(defaults.bool(forKey: "showDate"))
+        XCTAssertTrue(testDefaults.bool(forKey: "showDate"))
     }
 
     func testDisplaySuffixPersists() {
         delegate.settings.displaySuffix = .z
         XCTAssertEqual(delegate.settings.displaySuffix, .z)
-        XCTAssertEqual(defaults.string(forKey: "displaySuffix"), "Z")
+        XCTAssertEqual(testDefaults.string(forKey: "displaySuffix"), "Z")
     }
 
     func testCopyFormatPersists() {
         delegate.settings.copyFormat = .rfc3339
         XCTAssertEqual(delegate.settings.copyFormat, .rfc3339)
-        XCTAssertEqual(defaults.string(forKey: "copyFormat"), "RFC 3339")
+        XCTAssertEqual(testDefaults.string(forKey: "copyFormat"), "RFC 3339")
     }
 
     func testDateFormatPersists() {
         delegate.settings.dateFormat = .dayDateMonth
         XCTAssertEqual(delegate.settings.dateFormat, .dayDateMonth)
-        XCTAssertEqual(defaults.string(forKey: "dateFormat"), "Tue 2 Dec")
+        XCTAssertEqual(testDefaults.string(forKey: "dateFormat"), "Tue 2 Dec")
     }
 
     // MARK: - Copy Shortcut
@@ -87,7 +90,7 @@ final class AppDelegateTests: XCTestCase {
         delegate.settings.copyShortcut = shortcut
         XCTAssertEqual(delegate.settings.copyShortcut?.keyCode, 8)
         XCTAssertTrue(delegate.settings.copyShortcut?.modifierFlags.contains(.command) == true)
-        XCTAssertEqual(defaults.integer(forKey: "copyShortcutKeyCode"), 8)
+        XCTAssertEqual(testDefaults.integer(forKey: "copyShortcutKeyCode"), 8)
     }
 
     func testCopyShortcutDisplayIsComputed() {
@@ -101,9 +104,9 @@ final class AppDelegateTests: XCTestCase {
         delegate.settings.copyShortcut = HotKey(keyCode: 8, modifierFlags: [.command])
         delegate.settings.copyShortcut = nil
         XCTAssertNil(delegate.settings.copyShortcut)
-        XCTAssertNil(defaults.object(forKey: "copyShortcutKeyCode"))
-        XCTAssertNil(defaults.object(forKey: "copyShortcutModifiers"))
-        XCTAssertNil(defaults.object(forKey: "copyShortcutDisplay"))
+        XCTAssertNil(testDefaults.object(forKey: "copyShortcutKeyCode"))
+        XCTAssertNil(testDefaults.object(forKey: "copyShortcutModifiers"))
+        XCTAssertNil(testDefaults.object(forKey: "copyShortcutDisplay"))
     }
 
     func testCopyShortcutModifierRoundTrip() {
@@ -140,5 +143,19 @@ final class AppDelegateTests: XCTestCase {
         let regex = try! NSRegularExpression(pattern: #"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$"#)
         let match = regex.firstMatch(in: result, range: NSRange(result.startIndex..., in: result))
         XCTAssertNotNil(match, "Expected RFC 3339 format, got: \(result)")
+    }
+
+    // MARK: - Test Hermeticity
+
+    func testSettingsWriteDoesNotTouchStandardDefaults() {
+        // Sanity: make sure a flipped setting in this test doesn't leak
+        // into UserDefaults.standard. Write the negation of whatever
+        // standard currently holds so that an accidental passthrough
+        // write is guaranteed to flip the observed value.
+        let standard = UserDefaults.standard
+        let prior = (standard.object(forKey: "showSeconds") as? Bool) ?? true
+        delegate.settings.showSeconds = !prior
+        XCTAssertEqual(standard.object(forKey: "showSeconds") as? Bool ?? true, prior,
+                       "Test write should not have mutated UserDefaults.standard")
     }
 }
