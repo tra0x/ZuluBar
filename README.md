@@ -39,11 +39,7 @@ The paid version adds:
 
 Requires macOS 14.0+ and Xcode 16.0+. Open `ZuluBar.xcodeproj` and run (⌘R).
 
-Architecture:
-
-- `ZuluBarApp.swift` - App entry point
-- `AppDelegate.swift` - Menu bar management and UI
-- `TimeFormatter.swift` - Time formatting logic
+Architecture: `AppDelegate` owns the menu bar lifecycle and delegates to focused modules: `Settings` for preferences, `StatusBarRenderer` for title composition, `HotKeyManager` for global hotkey registration, and `TimeFormatter` for pure formatting.
 
 **Run tests:** ⌘U in Xcode or:
 
