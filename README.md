@@ -10,6 +10,8 @@ Lightweight UTC clock for the macOS menu bar with one-click copy and customizabl
 
 ## Usage
 
+![ZuluBar menu](docs/screenshots/menu.png)
+
 - **Left-click** → Copy UTC time to clipboard
 - **Right-click** → Settings menu
 
@@ -39,11 +41,7 @@ The paid version adds:
 
 Requires macOS 14.0+ and Xcode 16.0+. Open `ZuluBar.xcodeproj` and run (⌘R).
 
-Architecture:
-
-- `ZuluBarApp.swift` - App entry point
-- `AppDelegate.swift` - Menu bar management and UI
-- `TimeFormatter.swift` - Time formatting logic
+Architecture: `AppDelegate` owns the menu bar lifecycle and delegates to focused modules: `Settings` for preferences, `StatusBarRenderer` for title composition, `HotKeyManager` for global hotkey registration, and `TimeFormatter` for pure formatting.
 
 **Run tests:** ⌘U in Xcode or:
 
@@ -65,6 +63,7 @@ Common commands:
 
 ```bash
 # Free (unsigned)
+make run           # build and launch (quickest)
 make build-free
 make build-free-release
 make zip-free
