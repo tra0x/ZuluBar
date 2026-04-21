@@ -10,6 +10,8 @@ Lightweight UTC clock for the macOS menu bar with one-click copy and customizabl
 
 ## Usage
 
+![ZuluBar menu](docs/screenshots/menu.png)
+
 - **Left-click** → Copy UTC time to clipboard
 - **Right-click** → Settings menu
 
@@ -61,6 +63,7 @@ Common commands:
 
 ```bash
 # Free (unsigned)
+make run           # build and launch (quickest)
 make build-free
 make build-free-release
 make zip-free
