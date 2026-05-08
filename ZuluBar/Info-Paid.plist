@@ -30,7 +30,9 @@
 	<string></string>
 	<key>SUPublicEDKey</key>
 	<string>pF3gxdHC9grWuFfvnxFpH9AzPqGzZ9W3BobVbvpHi5Q=</string>
-	<key>SUFeedURL</key>
-	<string>https://updates.zulubar.app/appcast.xml</string>
+	<key>SUEnableAutomaticChecks</key>
+	<false/>
+	<key>ZuluBarFeedBaseURL</key>
+	<string>https://zulubar.app/appcast.xml</string>
 </dict>
 </plist>
