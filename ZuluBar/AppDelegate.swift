@@ -479,14 +479,7 @@ extension AppDelegate: SPUUpdaterDelegate {
     }
 
     func feedURLString(for updater: SPUUpdater) -> String? {
-        guard let key = updateKeyStore.load(),
-              var components = URLComponents(string: paidFeedBaseURL) else {
-            return nil
-        }
-        var queryItems = components.queryItems ?? []
-        queryItems.append(URLQueryItem(name: "key", value: key))
-        components.queryItems = queryItems
-        return components.string
+        UpdateFeedURLBuilder.build(baseURLString: paidFeedBaseURL, key: updateKeyStore.load())
     }
 
     func updater(_ updater: SPUUpdater, didAbortWithError error: Error) {
