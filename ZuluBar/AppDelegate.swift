@@ -17,6 +17,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var recorderPanel: HotKeyRecorderPanel?
     #if IS_PAID_BUILD
     private let updateKeyStore = UpdateKeyStore()
+    private let paidFeedBaseURL = Bundle.main.object(forInfoDictionaryKey: "ZuluBarFeedBaseURL") as? String ?? "https://zulubar.app/appcast.xml"
     private lazy var updaterController = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: self, userDriverDelegate: nil)
     #endif
 
@@ -53,7 +54,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         hotKeyManager.onTrigger = { [weak self] in self?.copyTimeToClipboard() }
         hotKeyManager.activate(settings.copyShortcut)
         #if IS_PAID_BUILD
+        // Sparkle's controller starts scheduled checks during initialization.
         _ = updaterController
+        configureAutomaticUpdateChecks()
         #endif
         updateUTC()
         startTimer()
@@ -123,6 +126,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Creates and configures the options menu.
     private func setupMenu() -> NSMenu {
         let menu = NSMenu()
+        menu.autoenablesItems = false
 
         // Display seconds toggle
         let showSecondsItem = NSMenuItem(title: "Display Seconds", action: #selector(toggleSeconds), keyEquivalent: "")
@@ -195,7 +199,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(NSMenuItem.separator())
 
         #if IS_PAID_BUILD
-        let updateKeyItem = NSMenuItem(title: "Update Key...", action: #selector(openUpdateKeyPrompt), keyEquivalent: "")
+        let updateKeyItem = NSMenuItem(title: "Update Key…", action: #selector(openUpdateKeyPrompt), keyEquivalent: "")
         menu.addItem(updateKeyItem)
 
         let checkForUpdatesItem = NSMenuItem(title: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: "")
@@ -288,7 +292,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             alert.addButton(withTitle: "Remove")
         }
 
-        let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 360, height: 24))
+        let input = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 360, height: 24))
         input.placeholderString = "Customer update key"
         input.stringValue = updateKeyStore.load() ?? ""
         alert.accessoryView = input
@@ -305,12 +309,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
             do {
                 try updateKeyStore.save(key)
+                configureAutomaticUpdateChecks()
+                showUpdateKeySavedAlert()
             } catch {
                 showUpdateKeySaveFailedAlert(message: "ZuluBar could not save the update key.")
             }
         case .alertThirdButtonReturn:
             do {
                 try updateKeyStore.delete()
+                configureAutomaticUpdateChecks()
+                showUpdateKeyRemovedAlert()
             } catch {
                 showUpdateKeySaveFailedAlert(message: "ZuluBar could not remove the update key.")
             }
@@ -329,6 +337,26 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         alert.runModal()
     }
 
+    private func showUpdateKeySavedAlert() {
+        let alert = NSAlert()
+        alert.messageText = "Update Key Saved"
+        alert.informativeText = "ZuluBar paid updates are now enabled."
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "OK")
+        NSApp.activate(ignoringOtherApps: true)
+        alert.runModal()
+    }
+
+    private func showUpdateKeyRemovedAlert() {
+        let alert = NSAlert()
+        alert.messageText = "Update Key Removed"
+        alert.informativeText = "ZuluBar paid updates are disabled until a new update key is entered."
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "OK")
+        NSApp.activate(ignoringOtherApps: true)
+        alert.runModal()
+    }
+
     private func showUpdateKeySaveFailedAlert(message: String) {
         let alert = NSAlert()
         alert.messageText = "Update Key Not Saved"
@@ -337,6 +365,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         alert.addButton(withTitle: "OK")
         NSApp.activate(ignoringOtherApps: true)
         alert.runModal()
+    }
+
+    private func showInvalidUpdateKeyAlert() {
+        let alert = NSAlert()
+        alert.messageText = "Update Key Invalid"
+        alert.informativeText = "ZuluBar could not verify your update key. Re-enter the key from your purchase email or recover your purchase from zulubar.app."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "OK")
+        NSApp.activate(ignoringOtherApps: true)
+        alert.runModal()
+    }
+
+    private func configureAutomaticUpdateChecks() {
+        updaterController.updater.automaticallyChecksForUpdates = updateKeyStore.load() != nil
     }
     #endif
 
@@ -438,16 +480,30 @@ extension AppDelegate: SPUUpdaterDelegate {
 
     func feedURLString(for updater: SPUUpdater) -> String? {
         guard let key = updateKeyStore.load(),
-              let encodedKey = key.addingPercentEncoding(withAllowedCharacters: Self.queryValueAllowedCharacters) else {
+              var components = URLComponents(string: paidFeedBaseURL) else {
             return nil
         }
-        return "https://zulubar.app/appcast.xml?key=\(encodedKey)"
+        var queryItems = components.queryItems ?? []
+        queryItems.append(URLQueryItem(name: "key", value: key))
+        components.queryItems = queryItems
+        return components.string
     }
 
-    private static let queryValueAllowedCharacters: CharacterSet = {
-        var allowed = CharacterSet.urlQueryAllowed
-        allowed.remove(charactersIn: "&+=?")
-        return allowed
-    }()
+    func updater(_ updater: SPUUpdater, didAbortWithError error: Error) {
+        guard Self.isInvalidKeyError(error) else {
+            return
+        }
+        showInvalidUpdateKeyAlert()
+    }
+
+    private static func isInvalidKeyError(_ error: Error) -> Bool {
+        let nsError = error as NSError
+        if [401, 403].contains(nsError.code) {
+            return true
+        }
+
+        return nsError.localizedDescription.contains("401") ||
+            nsError.localizedDescription.contains("403")
+    }
 }
 #endif

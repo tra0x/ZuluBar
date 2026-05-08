@@ -4,8 +4,14 @@ import Security
 /// Stores the paid update key outside UserDefaults so it is not swept up with
 /// normal preference exports or reset accidentally during settings changes.
 struct UpdateKeyStore {
-    private let service = "app.zulubar.update-key"
-    private let account = "sparkle-feed"
+    private let service: String
+    private let account: String
+    private let accessible = kSecAttrAccessibleAfterFirstUnlock
+
+    init(service: String = "app.zulubar.update-key", account: String = "sparkle-feed") {
+        self.service = service
+        self.account = account
+    }
 
     func load() -> String? {
         let query: [String: Any] = [
@@ -35,7 +41,8 @@ struct UpdateKeyStore {
         ]
 
         let attributes: [String: Any] = [
-            kSecValueData as String: data
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: accessible
         ]
 
         let status = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
@@ -49,6 +56,7 @@ struct UpdateKeyStore {
 
         var addQuery = query
         addQuery[kSecValueData as String] = data
+        addQuery[kSecAttrAccessible as String] = accessible
         let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
         guard addStatus == errSecSuccess else {
             throw KeychainError(status: addStatus)
