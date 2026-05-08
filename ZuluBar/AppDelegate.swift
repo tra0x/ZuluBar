@@ -18,7 +18,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     #if IS_PAID_BUILD
     private let updateKeyStore = UpdateKeyStore()
     private let paidFeedBaseURL = Bundle.main.object(forInfoDictionaryKey: "ZuluBarFeedBaseURL") as? String ?? "https://zulubar.app/appcast.xml"
-    private lazy var updaterController = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: self, userDriverDelegate: nil)
+    private lazy var updaterController = SPUStandardUpdaterController(startingUpdater: false, updaterDelegate: self, userDriverDelegate: nil)
     #endif
 
     // MARK: - Launch at Login
@@ -54,8 +54,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         hotKeyManager.onTrigger = { [weak self] in self?.copyTimeToClipboard() }
         hotKeyManager.activate(settings.copyShortcut)
         #if IS_PAID_BUILD
-        // Sparkle's controller starts scheduled checks during initialization.
-        _ = updaterController
+        // Defer starting Sparkle until a customer key exists so it never sees a
+        // nil feed URL at startup.
+        if updateKeyStore.load() != nil {
+            updaterController.startUpdater()
+        }
         configureAutomaticUpdateChecks()
         #endif
         updateUTC()
@@ -309,6 +312,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
             do {
                 try updateKeyStore.save(key)
+                updaterController.startUpdater()
                 configureAutomaticUpdateChecks()
                 showUpdateKeySavedAlert()
             } catch {
