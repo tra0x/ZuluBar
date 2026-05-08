@@ -497,13 +497,39 @@ extension AppDelegate: SPUUpdaterDelegate {
     }
 
     private static func isInvalidKeyError(_ error: Error) -> Bool {
-        let nsError = error as NSError
-        if [401, 403].contains(nsError.code) {
-            return true
+        guard let statusCode = httpStatusCode(in: error) else {
+            return false
+        }
+        return statusCode == 401 || statusCode == 403
+    }
+
+    private static func httpStatusCode(in error: Error) -> Int? {
+        var current: NSError? = error as NSError
+        var seen = Set<ObjectIdentifier>()
+
+        while let nsError = current {
+            let identifier = ObjectIdentifier(nsError)
+            guard !seen.contains(identifier) else {
+                return nil
+            }
+            seen.insert(identifier)
+
+            if let statusCode = nsError.userInfo["NSHTTPPropertyStatusCodeKey"] as? Int {
+                return statusCode
+            }
+
+            if let response = nsError.userInfo["NSURLErrorFailingURLResponseErrorKey"] as? HTTPURLResponse {
+                return response.statusCode
+            }
+
+            if let response = nsError.userInfo["NSErrorFailingURLResponseKey"] as? HTTPURLResponse {
+                return response.statusCode
+            }
+
+            current = nsError.userInfo[NSUnderlyingErrorKey] as? NSError
         }
 
-        return nsError.localizedDescription.contains("401") ||
-            nsError.localizedDescription.contains("403")
+        return nil
     }
 }
 #endif
