@@ -12,6 +12,7 @@ DerivedData/
 # App packaging
 *.app
 *.dSYM.zip
+dist/zulubar-site-release-vars.env
 
 # Local signing overrides
 .signing.local.mk

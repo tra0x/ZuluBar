@@ -6,7 +6,7 @@ Lightweight UTC clock for the macOS menu bar with one-click copy and customizabl
 
 - **[Get the signed build](https://zulubar.app)** — Signed, notarized, with auto-updates ($5)
 - **[Build from source (free)](#development)** — Unsigned, no auto-updates
-- **[Releases / changelog](https://github.com/tra0x/zulubar/releases)**
+- **[Changelog](CHANGELOG.md)**
 
 ## Usage
 
@@ -73,6 +73,8 @@ make build-paid
 make build-paid-release
 make zip
 ```
+
+Maintainer release notes live in [docs/releasing.md](docs/releasing.md).
 
 ## Contributing
 

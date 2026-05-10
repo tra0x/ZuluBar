@@ -4,7 +4,6 @@ set -euo pipefail
 ZIP_PATH="${1:?Usage: scripts/publish-update.sh <zip-path> [notes]}"
 NOTES="${2:-}"
 
-: "${CLOUDFLARE_API_TOKEN:?CLOUDFLARE_API_TOKEN must be set}"
 : "${R2_BUCKET:?R2_BUCKET must be set}"
 : "${SPARKLE_SIGN:?SPARKLE_SIGN must be set}"
 : "${APP_PATH:?APP_PATH must be set}"
@@ -37,16 +36,21 @@ echo "  Signature: ${SIG:0:20}..."
 echo "  Length:    $LENGTH bytes"
 
 echo "→ Uploading ${ARTIFACT_OBJECT_KEY} to private R2..."
-CLOUDFLARE_API_TOKEN="$CLOUDFLARE_API_TOKEN" \
-    wrangler r2 object put "$R2_BUCKET/${ARTIFACT_OBJECT_KEY}" \
+if [ -n "${CLOUDFLARE_API_TOKEN:-}" ]; then
+    echo "  Wrangler auth: CLOUDFLARE_API_TOKEN"
+else
+    echo "  Wrangler auth: local Wrangler login"
+fi
+
+wrangler r2 object put "$R2_BUCKET/${ARTIFACT_OBJECT_KEY}" \
     --remote \
     --file "$ZIP_PATH" \
     --content-type "application/zip"
 
 mkdir -p "$(dirname "$VARS_FILE")"
 cat > "$VARS_FILE" <<EOF
-# Apply these values to /Users/thomasantonio/coding/zulubar-site/wrangler.jsonc
-# and deploy zulubar-site so https://zulubar.app/appcast.xml serves this release.
+# Apply these values to the deployment site's production Worker config
+# so https://zulubar.app/appcast.xml serves this release.
 UPDATE_ARTIFACT_OBJECT_KEY=${ARTIFACT_OBJECT_KEY}
 UPDATE_ARTIFACT_FILENAME=${ARTIFACT_FILENAME}
 UPDATE_ARTIFACT_LENGTH=${LENGTH}

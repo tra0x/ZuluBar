@@ -1,0 +1,14 @@
+# Copy to .signing.local.mk and fill in maintainer-only release values.
+# Never commit .signing.local.mk.
+
+CODESIGN_IDENTITY = "Developer ID Application: Your Name (TEAMID)"
+TEAM_ID = TEAMID
+APPLE_ID = apple-id@example.com
+APP_SPECIFIC_PASSWORD = app-specific-password
+
+# Optional. Local releases can use `wrangler login` instead.
+# Export a Cloudflare API token in CI or other token-based environments.
+# CLOUDFLARE_API_TOKEN = ...
+
+R2_BUCKET = zulubar-downloads
+UPDATE_ARTIFACT_PREFIX = updates
