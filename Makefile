@@ -1,4 +1,4 @@
-.PHONY: build test clean release zip dmg run help build-free build-free-release build-paid build-paid-release zip-free notarize check-release-auth upload-appcast publish-download publish-download-from-current publish-update publish-update-from-current
+.PHONY: build test clean release zip dmg run help build-free build-free-release build-paid build-paid-release zip-free notarize check-release-auth upload-appcast publish-download publish-download-from-current publish-symbols-from-current publish-update publish-update-from-current
 
 # Variables
 APP_NAME = ZuluBar
@@ -26,6 +26,7 @@ APP_SPECIFIC_PASSWORD =
 # login by default; export CLOUDFLARE_API_TOKEN only for CI/token-based runs.
 R2_BUCKET = zulubar-downloads
 DOWNLOAD_ARTIFACT_PREFIX = releases
+SYMBOLS_ARTIFACT_PREFIX = symbols
 UPDATE_ARTIFACT_PREFIX = updates
 
 # Sparkle signing tool (in SPM artifacts — requires one prior build)
@@ -58,6 +59,8 @@ help:
 	@echo "    make publish-download    Build, notarize, create, and upload paid DMG"
 	@echo "    make publish-download-from-current"
 	@echo "                             Create/upload DMG from existing notarized paid app"
+	@echo "    make publish-symbols-from-current"
+	@echo "                             Archive/upload dSYM from existing paid app build"
 	@echo "    make publish-update      Build, notarize, sign, and upload private Sparkle ZIP"
 	@echo "    make publish-update-from-current"
 	@echo "                             Sign/upload ZIP from existing notarized paid app"
@@ -227,6 +230,21 @@ publish-download-from-current:
 		--file "$(BUILD_DIR)/Release-Paid/ZuluBar-$(APP_VERSION).dmg" \
 		--content-type "application/x-apple-diskimage"
 	@echo "✓ Published paid download: $(R2_BUCKET)/$(DOWNLOAD_ARTIFACT_PREFIX)/ZuluBar-$(APP_VERSION).dmg"
+
+publish-symbols-from-current:
+	@[ -d "$(BUILD_DIR)/Release-Paid/$(APP_NAME).app" ] || { echo "Error: $(BUILD_DIR)/Release-Paid/$(APP_NAME).app not found. Run 'make notarize' first."; exit 1; }
+	@[ -d "$(BUILD_DIR)/Release-Paid/$(APP_NAME).app.dSYM" ] || { echo "Error: $(BUILD_DIR)/Release-Paid/$(APP_NAME).app.dSYM not found. Run 'make notarize' first."; exit 1; }
+	$(eval APP_VERSION := $(shell /usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$(BUILD_DIR)/Release-Paid/$(APP_NAME).app/Contents/Info.plist"))
+	@echo "→ Creating ZuluBar-$(APP_VERSION).dSYM.zip..."
+	@ditto -c -k --keepParent \
+		$(BUILD_DIR)/Release-Paid/$(APP_NAME).app.dSYM \
+		$(BUILD_DIR)/Release-Paid/ZuluBar-$(APP_VERSION).dSYM.zip
+	@echo "→ Uploading $(SYMBOLS_ARTIFACT_PREFIX)/ZuluBar-$(APP_VERSION).dSYM.zip to private R2..."
+	@wrangler r2 object put "$(R2_BUCKET)/$(SYMBOLS_ARTIFACT_PREFIX)/ZuluBar-$(APP_VERSION).dSYM.zip" \
+		--remote \
+		--file "$(BUILD_DIR)/Release-Paid/ZuluBar-$(APP_VERSION).dSYM.zip" \
+		--content-type "application/zip"
+	@echo "✓ Published symbols: $(R2_BUCKET)/$(SYMBOLS_ARTIFACT_PREFIX)/ZuluBar-$(APP_VERSION).dSYM.zip"
 
 # Publish the existing notarized paid app without rebuilding or re-notarizing.
 publish-update-from-current:

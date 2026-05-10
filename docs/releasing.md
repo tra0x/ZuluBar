@@ -47,6 +47,12 @@ first-download DMG without rebuilding:
 make publish-download-from-current
 ```
 
+Archive and upload the matching app symbols privately:
+
+```sh
+make publish-symbols-from-current
+```
+
 If the app has already been built, notarized, and stapled, publish the existing
 Sparkle update ZIP without rebuilding:
 
@@ -60,3 +66,24 @@ appcast serves the uploaded ZIP through private `/updates/download` URLs.
 
 `dist/zulubar-site-release-vars.env` is generated release metadata and should
 not be committed.
+
+## Symbols
+
+Keep the `.dSYM` for every shipped build. It must come from the same build that
+produced the distributed app, otherwise crash reports will not symbolicate
+correctly.
+
+`make publish-symbols-from-current` archives:
+
+```text
+build/Release-Paid/ZuluBar.app.dSYM
+```
+
+and uploads it to private R2 under:
+
+```text
+symbols/ZuluBar-<version>.dSYM.zip
+```
+
+Symbols are maintainer-only diagnostic artifacts. They should not be committed
+to git or exposed through customer download routes.
