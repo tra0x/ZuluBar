@@ -4,7 +4,6 @@ set -euo pipefail
 ZIP_PATH="${1:?Usage: scripts/publish-update.sh <zip-path> [notes]}"
 NOTES="${2:-}"
 
-: "${CLOUDFLARE_API_TOKEN:?CLOUDFLARE_API_TOKEN must be set}"
 : "${R2_BUCKET:?R2_BUCKET must be set}"
 : "${SPARKLE_SIGN:?SPARKLE_SIGN must be set}"
 : "${APP_PATH:?APP_PATH must be set}"
@@ -13,6 +12,10 @@ NOTES="${2:-}"
 INFO_PLIST="$APP_PATH/Contents/Info.plist"
 VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$INFO_PLIST")
 BUILD=$(/usr/libexec/PlistBuddy -c "Print CFBundleVersion" "$INFO_PLIST")
+ARTIFACT_FILENAME="${UPDATE_ARTIFACT_FILENAME:-ZuluBar-${VERSION}.zip}"
+ARTIFACT_OBJECT_KEY="${UPDATE_ARTIFACT_OBJECT_KEY:-updates/${ARTIFACT_FILENAME}}"
+PUBLISH_DATE="${UPDATE_PUB_DATE:-$(date -u "+%Y-%m-%dT%H:%M:%SZ")}"
+VARS_FILE="${UPDATE_VARS_FILE:-dist/zulubar-site-release-vars.env}"
 
 echo "→ Publishing ZuluBar $VERSION (build $BUILD)..."
 
@@ -32,50 +35,36 @@ LENGTH=$(echo "$SIGN_OUTPUT" | grep -o 'length="[^"]*"' | cut -d'"' -f2)
 echo "  Signature: ${SIG:0:20}..."
 echo "  Length:    $LENGTH bytes"
 
-echo "→ Updating appcast.xml..."
-DATE=$(date -u "+%a, %d %b %Y %H:%M:%S +0000")
-URL="https://updates.zulubar.app/ZuluBar-${VERSION}.zip"
-NOTES_HTML="${NOTES:-Bug fixes and improvements.}"
-# Guard against ]]> breaking CDATA
-NOTES_HTML="${NOTES_HTML//]]>/]]]]><![CDATA[>}"
-
-MARKER="    <!-- Items added here by \`make publish-update\` -->"
-ITEM="    <item>
-        <title>Version ${VERSION}</title>
-        <pubDate>${DATE}</pubDate>
-        <sparkle:version>${BUILD}</sparkle:version>
-        <sparkle:shortVersionString>${VERSION}</sparkle:shortVersionString>
-        <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-        <description><![CDATA[<ul><li>${NOTES_HTML}</li></ul>]]></description>
-        <enclosure url=\"${URL}\" length=\"${LENGTH}\" type=\"application/zip\" sparkle:edSignature=\"${SIG}\" />
-    </item>"
-
-APPCAST="dist/appcast.xml"
-if ! grep -qF 'make publish-update' "$APPCAST"; then
-    echo "Error: insertion marker not found in $APPCAST"; exit 1
+echo "→ Uploading ${ARTIFACT_OBJECT_KEY} to private R2..."
+if [ -n "${CLOUDFLARE_API_TOKEN:-}" ]; then
+    echo "  Wrangler auth: CLOUDFLARE_API_TOKEN"
+else
+    echo "  Wrangler auth: local Wrangler login"
 fi
 
-# Insert new item before the marker
-ESCAPED_ITEM=$(printf '%s\n' "$ITEM" | sed 's/[&/\]/\\&/g')
-sed -i '' "s|${MARKER}|${ESCAPED_ITEM}\\
-${MARKER}|" "$APPCAST"
-
-echo "  ✓ Appended entry for version $VERSION (build $BUILD)"
-
-echo "→ Uploading ZuluBar-${VERSION}.zip to R2..."
-CLOUDFLARE_API_TOKEN="$CLOUDFLARE_API_TOKEN" \
-    wrangler r2 object put "$R2_BUCKET/ZuluBar-${VERSION}.zip" \
+wrangler r2 object put "$R2_BUCKET/${ARTIFACT_OBJECT_KEY}" \
+    --remote \
     --file "$ZIP_PATH" \
     --content-type "application/zip"
 
-echo "→ Uploading appcast.xml to R2..."
-CLOUDFLARE_API_TOKEN="$CLOUDFLARE_API_TOKEN" \
-    wrangler r2 object put "$R2_BUCKET/appcast.xml" \
-    --file dist/appcast.xml \
-    --content-type "application/rss+xml" \
-    --cache-control "no-cache"
+mkdir -p "$(dirname "$VARS_FILE")"
+cat > "$VARS_FILE" <<EOF
+# Apply these values to the deployment site's production Worker config
+# so https://zulubar.app/appcast.xml serves this release.
+UPDATE_ARTIFACT_OBJECT_KEY=${ARTIFACT_OBJECT_KEY}
+UPDATE_ARTIFACT_FILENAME=${ARTIFACT_FILENAME}
+UPDATE_ARTIFACT_LENGTH=${LENGTH}
+UPDATE_ARTIFACT_SIGNATURE=${SIG}
+UPDATE_VERSION=${BUILD}
+UPDATE_SHORT_VERSION=${VERSION}
+UPDATE_PUB_DATE=${PUBLISH_DATE}
+EOF
 
 echo ""
 echo "✓ Published ZuluBar $VERSION (build $BUILD)"
-echo "  Appcast: https://updates.zulubar.app/appcast.xml"
-echo "  ZIP:     $URL"
+echo "  R2 object: ${R2_BUCKET}/${ARTIFACT_OBJECT_KEY}"
+echo "  Appcast:   https://zulubar.app/appcast.xml?key=<customer-key>"
+echo "  Vars:      ${VARS_FILE}"
+if [ -n "$NOTES" ]; then
+    echo "  Notes:     $NOTES"
+fi

@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
-  <channel>
-    <title>ZuluBar Changelog</title>
-    <link>https://updates.zulubar.app/appcast.xml</link>
-    <language>en</language>
-    <!-- Items added here by `make publish-update` -->
-  </channel>
-</rss>
