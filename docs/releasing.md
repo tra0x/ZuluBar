@@ -26,6 +26,13 @@ Run this before publishing to verify Wrangler can see the target R2 bucket:
 make check-release-auth
 ```
 
+Build, sign, notarize, staple, create the first-download DMG, and upload it to
+private R2:
+
+```sh
+make publish-download
+```
+
 Build, sign, notarize, staple, create the Sparkle ZIP, sign it, upload it to
 private R2, and write deployment metadata:
 
@@ -34,7 +41,14 @@ make publish-update NOTES="Initial v1.0.0 release."
 ```
 
 If the app has already been built, notarized, and stapled, publish the existing
-artifact without rebuilding:
+first-download DMG without rebuilding:
+
+```sh
+make publish-download-from-current
+```
+
+If the app has already been built, notarized, and stapled, publish the existing
+Sparkle update ZIP without rebuilding:
 
 ```sh
 make publish-update-from-current NOTES="Initial v1.0.0 release."

@@ -1,4 +1,4 @@
-.PHONY: build test clean release zip dmg run help build-free build-free-release build-paid build-paid-release zip-free notarize check-release-auth upload-appcast publish-update publish-update-from-current
+.PHONY: build test clean release zip dmg run help build-free build-free-release build-paid build-paid-release zip-free notarize check-release-auth upload-appcast publish-download publish-download-from-current publish-update publish-update-from-current
 
 # Variables
 APP_NAME = ZuluBar
@@ -25,6 +25,7 @@ APP_SPECIFIC_PASSWORD =
 # Cloudflare R2 — override R2_BUCKET if needed. Wrangler uses the local OAuth
 # login by default; export CLOUDFLARE_API_TOKEN only for CI/token-based runs.
 R2_BUCKET = zulubar-downloads
+DOWNLOAD_ARTIFACT_PREFIX = releases
 UPDATE_ARTIFACT_PREFIX = updates
 
 # Sparkle signing tool (in SPM artifacts — requires one prior build)
@@ -54,6 +55,9 @@ help:
 	@echo "    make notarize            Build, sign, notarize, and staple paid release"
 	@echo "    make check-release-auth  Verify Wrangler auth and remote R2 bucket access"
 	@echo "    make dmg                 Create DMG disk image (paid)"
+	@echo "    make publish-download    Build, notarize, create, and upload paid DMG"
+	@echo "    make publish-download-from-current"
+	@echo "                             Create/upload DMG from existing notarized paid app"
 	@echo "    make publish-update      Build, notarize, sign, and upload private Sparkle ZIP"
 	@echo "    make publish-update-from-current"
 	@echo "                             Sign/upload ZIP from existing notarized paid app"
@@ -204,6 +208,25 @@ run: build
 # Usage: make publish-update NOTES="What's new"
 # For CI: set SPARKLE_ED_PRIVATE_KEY instead of using Keychain
 publish-update: notarize publish-update-from-current
+
+publish-download: notarize publish-download-from-current
+
+publish-download-from-current:
+	@[ -d "$(BUILD_DIR)/Release-Paid/$(APP_NAME).app" ] || { echo "Error: $(BUILD_DIR)/Release-Paid/$(APP_NAME).app not found. Run 'make notarize' first."; exit 1; }
+	$(eval APP_VERSION := $(shell /usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$(BUILD_DIR)/Release-Paid/$(APP_NAME).app/Contents/Info.plist"))
+	@echo "→ Creating ZuluBar-$(APP_VERSION).dmg from existing paid app..."
+	@hdiutil create \
+		-volname "$(APP_NAME)" \
+		-srcfolder $(BUILD_DIR)/Release-Paid/$(APP_NAME).app \
+		-ov \
+		-format UDZO \
+		$(BUILD_DIR)/Release-Paid/ZuluBar-$(APP_VERSION).dmg
+	@echo "→ Uploading $(DOWNLOAD_ARTIFACT_PREFIX)/ZuluBar-$(APP_VERSION).dmg to private R2..."
+	@wrangler r2 object put "$(R2_BUCKET)/$(DOWNLOAD_ARTIFACT_PREFIX)/ZuluBar-$(APP_VERSION).dmg" \
+		--remote \
+		--file "$(BUILD_DIR)/Release-Paid/ZuluBar-$(APP_VERSION).dmg" \
+		--content-type "application/x-apple-diskimage"
+	@echo "✓ Published paid download: $(R2_BUCKET)/$(DOWNLOAD_ARTIFACT_PREFIX)/ZuluBar-$(APP_VERSION).dmg"
 
 # Publish the existing notarized paid app without rebuilding or re-notarizing.
 publish-update-from-current:
