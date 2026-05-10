@@ -87,3 +87,24 @@ symbols/ZuluBar-<version>.dSYM.zip
 
 Symbols are maintainer-only diagnostic artifacts. They should not be committed
 to git or exposed through customer download routes.
+
+## Tags
+
+Use annotated tags for releases:
+
+```sh
+git tag -a v1.0.0 -m "ZuluBar 1.0.0"
+git push origin v1.0.0
+```
+
+Signed annotated tags are preferred when the maintainer has working Git tag
+signing configured:
+
+```sh
+git tag -s v1.0.0 -m "ZuluBar 1.0.0"
+git push origin v1.0.0
+```
+
+The tag message should include the product name and version. Do not include
+private artifact URLs, credentials, customer keys, notarization passwords, or
+other release secrets in the tag annotation.
