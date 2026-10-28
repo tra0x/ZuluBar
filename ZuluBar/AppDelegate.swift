@@ -11,10 +11,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     var statusItem: NSStatusItem!
     var timer: Timer?
-    var isShowingFeedback = false
     var settings = Settings()
     private let hotKeyManager = HotKeyManager()
     private var recorderPanel: HotKeyRecorderPanel?
+    private var clockStripController: ClockStripController?
+    private var timeZonesPanel: TimeZonesPanel?
     #if IS_PAID_BUILD
     private let updateKeyStore = UpdateKeyStore()
     private let paidFeedBaseURL = Bundle.main.object(forInfoDictionaryKey: "ZuluBarFeedBaseURL") as? String ?? "https://zulubar.app/appcast.xml"
@@ -63,6 +64,26 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         #endif
         updateUTC()
         startTimer()
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self, selector: #selector(refreshAfterSystemChange),
+            name: NSWorkspace.didWakeNotification, object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(refreshAfterSystemChange),
+            name: .NSSystemClockDidChange, object: nil
+        )
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        timer?.invalidate()
+        timer = nil
+        NSWorkspace.shared.notificationCenter.removeObserver(self)
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    @objc private func refreshAfterSystemChange(_ notification: Notification) {
+        updateUTC()
+        startTimer()
     }
 
     // MARK: - Setup
@@ -74,6 +95,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         statusItem.button?.target = self
         statusItem.button?.action = #selector(statusItemClicked)
         statusItem.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
+
+        let controller = ClockStripController(statusItem: statusItem)
+        controller.onCopyUTC = { [weak self] in self?.copyTimeToClipboard() }
+        controller.onCopyAdditional = { [weak self] identifier in
+            self?.copyAdditionalClock(identifier: identifier)
+        }
+        controller.onOptionsMenu = { [weak self] anchor in
+            self?.showOptionsMenu(from: anchor)
+        }
+        clockStripController = controller
     }
 
     // MARK: - User Interaction
@@ -91,37 +122,32 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    /// Shows the options menu below the status bar item.
-    private func showOptionsMenu() {
+    /// Opens the shared options menu at whichever clock was clicked.
+    private func showOptionsMenu(from anchor: NSView? = nil) {
         let menu = setupMenu()
         menu.delegate = self
 
-        if let button = statusItem.button {
-            let point = NSPoint(x: 0, y: button.frame.height)
-            menu.popUp(positioning: nil, at: point, in: button)
+        if let anchor = anchor ?? statusItem?.button {
+            let point = NSPoint(x: 0, y: anchor.bounds.height)
+            menu.popUp(positioning: nil, at: point, in: anchor)
         }
     }
 
-    /// Copies the current time to clipboard and shows visual feedback.
+    /// The status-button UTC path and global shortcut always copy UTC.
     private func copyTimeToClipboard() {
-        let textToCopy = getFormattedTimeForCopy()
+        copyToClipboard(getFormattedTimeForCopy(), clockIdentifier: nil)
+    }
+
+    private func copyAdditionalClock(identifier: String) {
+        guard let text = getFormattedTimeForAdditionalClock(identifier: identifier) else { return }
+        copyToClipboard(text, clockIdentifier: identifier)
+    }
+
+    private func copyToClipboard(_ text: String, clockIdentifier: String?) {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
-        pasteboard.setString(textToCopy, forType: .string)
-
-        showCopiedFeedback()
-    }
-
-    /// Displays "Copied!" message briefly in the status bar.
-    private func showCopiedFeedback() {
-        isShowingFeedback = true
-        statusItem.button?.title = "✓ Copied"
-
-        // Restore original time after 0.5 seconds
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-            self?.isShowingFeedback = false
-            self?.updateUTC()
-        }
+        pasteboard.setString(text, forType: .string)
+        clockStripController?.showCopiedFeedback(for: clockIdentifier)
     }
 
     // MARK: - Menu Setup
@@ -130,6 +156,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func setupMenu() -> NSMenu {
         let menu = NSMenu()
         menu.autoenablesItems = false
+
+        let timeZonesItem = NSMenuItem(title: "Time Zones…", action: #selector(openTimeZones), keyEquivalent: "")
+        timeZonesItem.target = self
+        menu.addItem(timeZonesItem)
+        menu.addItem(NSMenuItem.separator())
 
         // Display seconds toggle
         let showSecondsItem = NSMenuItem(title: "Display Seconds", action: #selector(toggleSeconds), keyEquivalent: "")
@@ -223,6 +254,29 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     // MARK: - Menu Actions
+
+    @objc private func openTimeZones() {
+        if let panel = timeZonesPanel {
+            panel.update(clocks: settings.additionalClocks)
+        } else {
+            let availability: TimeZonesPanel.CatalogAvailability
+            switch TimeZoneCatalog.loadResult {
+            case .success: availability = .available
+            case .failure(let error): availability = .unavailable(error)
+            }
+            let panel = TimeZonesPanel(clocks: settings.additionalClocks, catalog: availability)
+            panel.onClocksChanged = { [weak self] clocks in
+                guard let self else { return }
+                self.settings.additionalClocks = clocks
+                self.timeZonesPanel?.update(clocks: self.settings.additionalClocks)
+                self.updateUTC()
+            }
+            timeZonesPanel = panel
+            panel.center()
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        timeZonesPanel?.makeKeyAndOrderFront(nil)
+    }
 
     @objc func toggleSeconds(_ sender: NSMenuItem) {
         settings.showSeconds.toggle()
@@ -397,13 +451,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // MARK: - Time Formatting
 
-    /// Formats the current time according to the selected copy format.
-    func getFormattedTimeForCopy() -> String {
+    /// UTC clipboard output, independent of any added city clocks.
+    func getFormattedTimeForCopy(at date: Date = Date()) -> String {
         let format: UTCTimeFormatter.Format
 
         switch settings.copyFormat {
         case .display:
-            // Match current display settings for copy output
             format = .humanReadable(showSeconds: settings.showSeconds, suffix: settings.displaySuffix)
         case .unixTimestamp:
             format = .unixTimestamp
@@ -411,7 +464,28 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             format = .rfc3339
         }
 
-        return UTCTimeFormatter.format(as: format)
+        return UTCTimeFormatter.format(date, as: format)
+    }
+
+    /// Resolve the configured identifier again so a click on a removed clock
+    /// cannot accidentally copy another clock after a reorder/removal.
+    func getFormattedTimeForAdditionalClock(identifier: String, at date: Date = Date()) -> String? {
+        guard let clock = settings.additionalClocks.first(where: { $0.identifier == identifier }) else { return nil }
+        return ZoneClockFormatter.copy(for: clock, at: date, format: settings.copyFormat, showSeconds: settings.showSeconds)
+    }
+
+    /// Every clock in one refresh is derived from the same captured instant.
+    func statusBarContent(at date: Date) -> (utcTitle: String, additional: [ClockStripEntry]) {
+        let showSeconds = settings.showSeconds
+        let display = StatusBarDisplay(
+            dateFormat: settings.showDate ? settings.dateFormat : nil,
+            timeFormat: .humanReadable(showSeconds: showSeconds, suffix: settings.displaySuffix)
+        )
+        let entries = settings.additionalClocks.compactMap { clock -> ClockStripEntry? in
+            guard let face = ZoneClockFormatter.face(for: clock, at: date, showSeconds: showSeconds) else { return nil }
+            return ClockStripEntry(identifier: clock.identifier, label: face.label, time: face.time)
+        }
+        return (StatusBarRenderer.render(display, at: date), entries)
     }
 
     // MARK: - Shortcut Recorder
@@ -436,37 +510,32 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // MARK: - Timer Management
 
-    /// Starts the timer that updates the status bar display, synced to the next whole second.
+    /// One shared timer, restarted after wake/clock changes and aligned to the
+    /// next whole second. Retain the initial timer too, so restarts cancel it.
     func startTimer() {
-        // Calculate time until next whole second for precise sync
+        timer?.invalidate()
         let now = Date()
-        let calendar = Calendar.current
-        let nanosecond = calendar.component(.nanosecond, from: now)
+        let nanosecond = Calendar.current.component(.nanosecond, from: now)
         let delayToNextSecond = Double(1_000_000_000 - nanosecond) / 1_000_000_000.0
 
-        // Schedule first update at the next whole second
         let syncTimer = Timer(timeInterval: delayToNextSecond, repeats: false) { [weak self] _ in
-            self?.updateUTC()
-
-            // Now start repeating timer every 1 second (already synced)
+            guard let self else { return }
+            self.updateUTC()
             let repeatingTimer = Timer(timeInterval: 1.0, repeats: true) { [weak self] _ in
                 self?.updateUTC()
             }
             RunLoop.main.add(repeatingTimer, forMode: .common)
-            self?.timer = repeatingTimer
+            self.timer = repeatingTimer
         }
+        timer = syncTimer
         RunLoop.main.add(syncTimer, forMode: .common)
     }
 
-    /// Updates the status bar with the current UTC time.
+    /// Feedback is per-clock presentation state; it never pauses other clocks.
     func updateUTC() {
-        guard !isShowingFeedback else { return }
-
-        let display = StatusBarDisplay(
-            dateFormat: settings.showDate ? settings.dateFormat : nil,
-            timeFormat: .humanReadable(showSeconds: settings.showSeconds, suffix: settings.displaySuffix)
-        )
-        statusItem.button?.title = StatusBarRenderer.render(display)
+        guard let clockStripController else { return }
+        let content = statusBarContent(at: Date())
+        clockStripController.render(utcTitle: content.utcTitle, additional: content.additional)
     }
 }
 

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Optional two-line city clocks alongside the unchanged UTC clock
+- Searchable time-zone picker with IANA names/aliases and add, remove, and reorder controls
+- Per-clock local-time copying and copy confirmation; the global shortcut remains UTC
+- Shared clock refresh after wake and system clock changes
+
 ## [1.0.0] - 2026-05-10
 
 ### Added
