@@ -26,7 +26,17 @@ struct Settings {
         static let copyShortcutKeyCode = "copyShortcutKeyCode"
         static let copyShortcutModifiers = "copyShortcutModifiers"
         static let copyShortcutDisplay = "copyShortcutDisplay"  // legacy (pre-PR#2); no longer written
+        static let additionalClocks = "additionalClocks.v1"
     }
+
+    // Links from the tzdb 'backward' file that resolve to the fixed-zero
+    // UTC/GMT zone — not geographic zones that merely happen to sit at
+    // offset zero today (e.g. Africa/Abidjan), which stay selectable.
+    private static let utcAliasIdentifiers: Set<String> = [
+        "UTC", "Etc/UTC", "Zulu", "Etc/Zulu", "Universal", "Etc/Universal",
+        "UCT", "Etc/UCT", "GMT", "Etc/GMT", "GMT0", "Etc/GMT0",
+        "GMT+0", "Etc/GMT+0", "GMT-0", "Etc/GMT-0", "Greenwich", "Etc/Greenwich",
+    ]
 
     var showSeconds: Bool {
         get { defaults.object(forKey: Keys.showSeconds) as? Bool ?? true }
@@ -84,6 +94,36 @@ struct Settings {
                 defaults.removeObject(forKey: Keys.copyShortcutModifiers)
                 defaults.removeObject(forKey: Keys.copyShortcutDisplay)
             }
+        }
+    }
+
+    /// Ordered, opt-in extra city clocks. Decoding is entry-by-entry so one
+    /// malformed/duplicate/disallowed entry doesn't discard the rest; a
+    /// corrupt or non-array top-level value safely reads as `[]`. Never
+    /// mutates `defaults` as a side effect of reading.
+    var additionalClocks: [AdditionalClock] {
+        get {
+            guard let data = defaults.data(forKey: Keys.additionalClocks) else { return [] }
+            guard let rawObject = try? JSONSerialization.jsonObject(with: data) else { return [] }
+            guard let rawArray = rawObject as? [Any] else { return [] }
+
+            var seenIdentifiers = Set<String>()
+            var result: [AdditionalClock] = []
+            for rawEntry in rawArray {
+                guard let dict = rawEntry as? [String: Any],
+                      let entryData = try? JSONSerialization.data(withJSONObject: dict),
+                      let clock = try? JSONDecoder().decode(AdditionalClock.self, from: entryData) else { continue }
+                guard TimeZone(identifier: clock.identifier) != nil else { continue }
+                guard !Self.utcAliasIdentifiers.contains(clock.identifier) else { continue }
+                guard !seenIdentifiers.contains(clock.identifier) else { continue }
+                seenIdentifiers.insert(clock.identifier)
+                result.append(clock)
+            }
+            return result
+        }
+        set {
+            guard let data = try? JSONEncoder().encode(newValue) else { return }
+            defaults.set(data, forKey: Keys.additionalClocks)
         }
     }
 }

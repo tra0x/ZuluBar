@@ -6,6 +6,9 @@ xcuserdata/
 build/
 DerivedData/
 
+# Metadata generator test caches
+__pycache__/
+
 # macOS
 .DS_Store
 
