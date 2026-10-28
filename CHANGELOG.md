@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-28
+
 ### Added
 - Optional two-line city clocks alongside the unchanged UTC clock
 - Searchable time-zone picker with IANA names/aliases and add, remove, and reorder controls
@@ -45,7 +47,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - RFC 3339 (`2025-12-02T14:23:45Z`)
 - All preferences persisted via UserDefaults
 
-[unreleased]: https://github.com/tra0x/ZuluBar/compare/v1.0.0...HEAD
+[unreleased]: https://github.com/tra0x/ZuluBar/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/tra0x/ZuluBar/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/tra0x/ZuluBar/compare/v0.2.0...v1.0.0
 [0.2.0]: https://github.com/tra0x/ZuluBar/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/tra0x/ZuluBar/releases/tag/v0.1.0
